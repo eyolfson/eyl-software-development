@@ -18,6 +18,7 @@
 #include <assert.h>
 #include <stdbool.h>
 #include <stdint.h>
+#include <stdio.h>
 #include <string.h>
 
 #include <fcntl.h>
@@ -189,26 +190,44 @@ static int parse(uint8_t *state, struct record *record, bool *valid, uint8_t c)
 	return 0;
 }
 
-static uint16_t address_valid = 0x00;
+static uint32_t word_at_address(uint32_t base) {
+	return data[base] +
+	       + (data[base + 1] * 0x100)
+	       + (data[base + 2] * 0x10000)
+	       + (data[base + 3] * 0x1000000);
+}
 
-static uint32_t little_endian_to_address(uint8_t a, uint8_t b, uint8_t c, uint8_t d) {
-	return (d * 0x1000000) + (c *0x10000) + (b * 0x100) + a;
+static uint16_t halfword_at_address(uint32_t base) {
+	return data[base] +
+	       + (data[base + 1] * 0x100);
 }
 
 /* SRAM_L = [0x1FFF8000, 0x20000000)
  * SRAM_U = [0x20000000, 0x20007FFF)
  */
 static void emulate(uint16_t length) {
-	uint32_t sp = little_endian_to_address(data[0], data[1], data[2], data[3]);
-	uint32_t pc = little_endian_to_address(data[4], data[5], data[6], data[7]);
-	uint32_t nmi_address = little_endian_to_address(data[8], data[9], data[10], data[11]);
+	uint32_t initial_sp = word_at_address(0x00000000);
+	uint32_t initial_pc = word_at_address(0x00000004);
+	uint32_t nmi_address = word_at_address(0x00000008);
 
-	printf("Initial Stack Pointer:   %08X\n", sp);
-	printf("Initial Program Counter: %08X\n", pc);
+	printf("Initial Stack Pointer:   %08X\n", initial_sp);
+	printf("Initial Program Counter: %08X\n", initial_pc);
 	printf("NMI Address:             %08X\n", nmi_address);
 
-	printf("\nStart\n%04X\n", data[pc] + (0x100 * (data[pc] + 1)));
+	/* R15 (Program Counter):
+     EPSR (Execution Program Status Register): bit 24 is the Thumb bit */
+
+	uint32_t r13 = initial_sp;
+	uint32_t r15 = initial_pc & 0xFFFFFFFE;
+	uint32_t epsr = 0x01000000;
+	if ((initial_pc & 0x00000001) == 0x00000001) {
+		epsr |= (1 << 24);
+	}
+
+	printf("\nExecution:\n%08X: %04X\n", r15, halfword_at_address(r15));
 }
+
+static uint16_t address_valid = 0x00;
 
 static void record_valid(struct record *record) {
 	if (record->type != RECORD_TYPE_DATA) {
