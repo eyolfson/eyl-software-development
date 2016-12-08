@@ -15,6 +15,7 @@
  * this program. If not, see <http://www.gnu.org/licenses/>.
  */
 
+#include <assert.h>
 #include <stdbool.h>
 #include <stdint.h>
 #include <string.h>
@@ -35,6 +36,8 @@ struct record {
 	uint8_t data[16];
 	uint8_t checksum;
 };
+
+static uint8_t data[0x37F4];
 
 static uint8_t ascii_hex_to_value(uint8_t c)
 {
@@ -186,6 +189,45 @@ static int parse(uint8_t *state, struct record *record, bool *valid, uint8_t c)
 	return 0;
 }
 
+static uint16_t address_valid = 0x00;
+
+static uint32_t little_endian_to_address(uint8_t a, uint8_t b, uint8_t c, uint8_t d) {
+	return (d * 0x1000000) + (c *0x10000) + (b * 0x100) + a;
+}
+
+/* SRAM_L = [0x1FFF8000, 0x20000000)
+ * SRAM_U = [0x20000000, 0x20007FFF)
+ */
+static void emulate(uint16_t length) {
+	uint32_t sp = little_endian_to_address(data[0], data[1], data[2], data[3]);
+	uint32_t pc = little_endian_to_address(data[4], data[5], data[6], data[7]);
+	uint32_t nmi_address = little_endian_to_address(data[8], data[9], data[10], data[11]);
+
+	printf("Initial Stack Pointer:   %08X\n", sp);
+	printf("Initial Program Counter: %08X\n", pc);
+	printf("NMI Address:             %08X\n", nmi_address);
+
+	printf("\nStart\n%04X\n", data[pc] + (0x100 * (data[pc] + 1)));
+}
+
+static void record_valid(struct record *record) {
+	if (record->type != RECORD_TYPE_DATA) {
+		return;
+	}
+
+	assert(record->address == address_valid);
+	for (uint16_t i = 0; i < record->byte_count; ++i) {
+		uint16_t data_i = record->address + i;
+		assert(data_i < 0x37F4);
+		data[data_i] = record->data[i];
+	}
+	address_valid += record->byte_count;
+
+	if (address_valid == 0x37F4) {
+		emulate(0x37F4);
+	}
+}
+
 int main(int argc, char **argv)
 {
 	if (argc != 2) {
@@ -215,7 +257,7 @@ int main(int argc, char **argv)
 				break;
 			}
 			if (valid) {
-				/* TODO */
+				record_valid(&record);
 			}
 			++i;
 		}
