@@ -25,6 +25,8 @@
 #include <sys/stat.h>
 #include <unistd.h>
 
+#include "teensy_3_2.h"
+
 const uint8_t START_CODE = ':';
 static const uint8_t RECORD_BYTE_COUNT_MAX = 16;
 static const uint8_t RECORD_TYPE_DATA = 0;
@@ -190,43 +192,6 @@ static int parse(uint8_t *state, struct record *record, bool *valid, uint8_t c)
 	return 0;
 }
 
-static uint32_t word_at_address(uint32_t base) {
-	return data[base] +
-	       + (data[base + 1] * 0x100)
-	       + (data[base + 2] * 0x10000)
-	       + (data[base + 3] * 0x1000000);
-}
-
-static uint16_t halfword_at_address(uint32_t base) {
-	return data[base] +
-	       + (data[base + 1] * 0x100);
-}
-
-/* SRAM_L = [0x1FFF8000, 0x20000000)
- * SRAM_U = [0x20000000, 0x20007FFF)
- */
-static void emulate(uint16_t length) {
-	uint32_t initial_sp = word_at_address(0x00000000);
-	uint32_t initial_pc = word_at_address(0x00000004);
-	uint32_t nmi_address = word_at_address(0x00000008);
-
-	printf("Initial Stack Pointer:   %08X\n", initial_sp);
-	printf("Initial Program Counter: %08X\n", initial_pc);
-	printf("NMI Address:             %08X\n", nmi_address);
-
-	/* R15 (Program Counter):
-     EPSR (Execution Program Status Register): bit 24 is the Thumb bit */
-
-	uint32_t r13 = initial_sp;
-	uint32_t r15 = initial_pc & 0xFFFFFFFE;
-	uint32_t epsr = 0x01000000;
-	if ((initial_pc & 0x00000001) == 0x00000001) {
-		epsr |= (1 << 24);
-	}
-
-	printf("\nExecution:\n%08X: %04X\n", r15, halfword_at_address(r15));
-}
-
 static uint16_t address_valid = 0x00;
 
 static void record_valid(struct record *record) {
@@ -242,9 +207,9 @@ static void record_valid(struct record *record) {
 	}
 	address_valid += record->byte_count;
 
-	if (address_valid == 0x37F4) {
-		emulate(0x37F4);
-	}
+	//if (address_valid == 0x37F4) {
+//		emulate(0x37F4);
+//	}
 }
 
 int main(int argc, char **argv)
@@ -284,6 +249,11 @@ int main(int argc, char **argv)
 			break;
 		}
 		bytes_read = read(fd, buf, BUF_LENGTH);
+	}
+
+	if (address_valid == 0x37F4) {
+		teensy_3_2_emulate(data, address_valid);
+printf("okay");
 	}
 
 	if (bytes_read < 0) {

@@ -22,4 +22,5 @@ add_compile_options(-Wextra)
 
 add_executable(i8hex-reader
 	main.c
+	teensy_3_2.c
 )
