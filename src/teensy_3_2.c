@@ -2,6 +2,11 @@
 
 #include <stdio.h>
 
+struct registers {
+	uint32_t r[16];
+	uint32_t epsr;
+};
+
 static uint8_t *flash;
 
 static uint32_t word_at_address(uint32_t base) {
@@ -18,11 +23,29 @@ static uint16_t halfword_at_address(uint32_t base) {
 
 static void set_bit(uint32_t *v, uint8_t i) { *v |= (1 << i); }
 
+static void step(struct registers *registers) {
+	uint16_t encoded = halfword_at_address(registers->r[15]);
+	printf("%08X: %04X\n", registers->r[15], halfword_at_address(registers->r[15]));
+
+	if ((encoded & 0xF800) == 0x4800) {
+		/* LDR (literal) */
+		uint8_t rt = (encoded & 0x0700) >> 8;
+		uint8_t imm8 = encoded;
+		uint32_t address = (imm8 << 2) + registers->r[15] + 4;
+		registers->r[rt] = word_at_address(address);
+		printf("  > r%d = %08X\n", rt, registers->r[rt]);
+	}
+
+	registers->r[15] += 2;
+}
+
 /* SRAM_L = [0x1FFF8000, 0x20000000)
  * SRAM_U = [0x20000000, 0x20007FFF)
  */
 void teensy_3_2_emulate(uint8_t *data, uint32_t length) {
 	flash = data;
+
+	struct registers registers;
 
 	uint32_t initial_sp = word_at_address(0x00000000);
 	uint32_t initial_pc = word_at_address(0x00000004);
@@ -36,20 +59,17 @@ void teensy_3_2_emulate(uint8_t *data, uint32_t length) {
      EPSR (Execution Program Status Register): bit 24 is the Thumb bit */
 	const uint8_t EPSR_T_BIT = 24;
 
-	uint32_t r13 = initial_sp;
-	uint32_t r15 = initial_pc & 0xFFFFFFFE;
-	uint32_t epsr = 0x01000000;
+	registers.r[13] = initial_sp;
+	registers.r[15] = initial_pc & 0xFFFFFFFE;
+	registers.epsr = 0x01000000;
 	if ((initial_pc & 0x00000001) == 0x00000001) {
-		set_bit(&epsr, EPSR_T_BIT);
+		set_bit(&registers.epsr, EPSR_T_BIT);
 	}
 
 	uint32_t r3 = word_at_address(0x02FC);
 
 	printf("\nExecution:\n");
-	printf("%08X: %04X\n", r15, halfword_at_address(r15));
-	r15 += 2;
-	printf("%08X: %04X\n", r15, halfword_at_address(r15));
-	r15 += 2;
-	printf("%08X: %04X\n", r15, halfword_at_address(r15));
+	for (int i = 0; i < 2; ++i){
+		step(&registers);
+	}
 }
-

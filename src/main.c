@@ -206,10 +206,6 @@ static void record_valid(struct record *record) {
 		data[data_i] = record->data[i];
 	}
 	address_valid += record->byte_count;
-
-	//if (address_valid == 0x37F4) {
-//		emulate(0x37F4);
-//	}
 }
 
 int main(int argc, char **argv)
@@ -253,7 +249,9 @@ int main(int argc, char **argv)
 
 	if (address_valid == 0x37F4) {
 		teensy_3_2_emulate(data, address_valid);
-printf("okay");
+	}
+	else {
+		ret = 2;
 	}
 
 	if (bytes_read < 0) {
