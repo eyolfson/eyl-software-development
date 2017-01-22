@@ -25,7 +25,7 @@ static void set_bit(uint32_t *v, uint8_t i) { *v |= (1 << i); }
 
 static void step(struct registers *registers) {
 	uint16_t encoded = halfword_at_address(registers->r[15]);
-	printf("%08X: %04X\n", registers->r[15], halfword_at_address(registers->r[15]));
+	printf("%08X: %04X\n", registers->r[15], encoded);
 
 	if ((encoded & 0xF800) == 0x4800) {
 		/* LDR (literal) */
@@ -33,7 +33,14 @@ static void step(struct registers *registers) {
 		uint8_t imm8 = encoded;
 		uint32_t address = (imm8 << 2) + registers->r[15] + 4;
 		registers->r[rt] = word_at_address(address);
-		printf("  > r%d = %08X\n", rt, registers->r[rt]);
+		printf("  LDR R%d #%d\n", rt, imm8 << 2);
+		printf("  > R%d = %08X\n", rt, registers->r[rt]);
+	}
+	if ((encoded & 0xE000) == 0xE000) {
+		/* 32-bit instruction encoding */
+		registers->r[15] += 2;
+		uint16_t second_encoded = halfword_at_address(registers->r[15]);
+		printf("          %04X\n", second_encoded);
 	}
 
 	registers->r[15] += 2;
@@ -66,7 +73,7 @@ void teensy_3_2_emulate(uint8_t *data, uint32_t length) {
 		set_bit(&registers.epsr, EPSR_T_BIT);
 	}
 
-	uint32_t r3 = word_at_address(0x02FC);
+	//uint32_t r3 = word_at_address(0x02FC);
 
 	printf("\nExecution:\n");
 	for (int i = 0; i < 2; ++i){
