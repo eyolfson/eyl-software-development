@@ -12,7 +12,7 @@ static uint8_t *flash;
 
 static bool is_branch;
 
-static void memory_halfword_write(uint32_t address, uint16_t halfword)
+static void memory_write_halfword(uint32_t address, uint16_t halfword)
 {
 	if (address < 0x20008000) {
 		flash[address] = (halfword & 0x00FF);
@@ -116,6 +116,54 @@ static void a6_7_75_t1(struct registers *registers,
 	printf("  MOVS R%d #%d\n", rd, imm8);
 	registers->r[rd] = 0x00000000 + imm8;
 	printf("  > R%d = %08X\n", rd, imm8);
+	/* TODO: Set flags */
+}
+
+static void a6_7_75_t2(struct registers *registers,
+                       uint16_t first_halfword,
+                       uint16_t second_halfword)
+{
+	uint8_t S = (first_halfword & 0x0010) >> 4;
+	/* TODO: Set flags */
+
+	uint8_t i = (first_halfword & 0x0400) >> 10;
+	uint8_t imm3 = (second_halfword & 0x7000) >> 12;
+	uint8_t rd = (second_halfword & 0x0F00) >> 8;
+	uint8_t imm8 = (second_halfword & 0x00FF);
+
+	uint16_t imm12 = (i * 0x800)
+	                 + (imm3 * 0x100)
+	                 + imm8;
+
+	if ((imm12 & 0xC00) == 0x000) {
+	}
+	else {
+		uint8_t rotate = (imm12 & 0xF80) >> 7;
+		uint32_t unrotated_value = 0x80 + (imm12 & 0x7F);
+		uint32_t result = unrotated_value << (32 - rotate);
+		registers->r[rd] = result;
+		printf("  MOV.W R%d #0x%08X\n", rd, result);
+		printf("  > R%d = %08X\n", rd, result);
+	}
+}
+
+static void a6_7_75_t3(struct registers *registers,
+                       uint16_t first_halfword,
+                       uint16_t second_halfword)
+{
+	uint8_t i = (first_halfword & 0x0400) >> 10;
+	uint8_t imm4 = (first_halfword & 0x000F);
+	uint8_t imm3 = (second_halfword & 0x7000) >> 12;
+	uint8_t rd = (0x0F00 & second_halfword) >> 8;
+	uint8_t imm8 = (second_halfword & 0x00FF);
+	uint32_t imm32 = (imm4 * 0x1000)
+	                 + (i * 0x0800)
+	                 + (imm3 * 0x0100)
+	                 + imm8;
+
+	registers->r[rd] = imm32;
+	printf("  MOVW R%d #0x%04X\n", rd, imm32);
+	printf("  > R%d = %08X\n", rd, imm32);
 }
 
 static void a5_2_1(struct registers *registers,
@@ -137,6 +185,21 @@ static void a5_2_3(struct registers *registers,
 	}
 }
 
+static void a5_3_1(struct registers *registers,
+                   uint16_t first_halfword,
+                   uint16_t second_halfword)
+{
+	uint8_t op = (first_halfword & 0x01F0) >> 4;
+	uint8_t rn = (first_halfword & 0x000F);
+	if ((op & 0x1E)  == 0x04) {
+		if (!(rn == 0xF)) {
+		}
+		else {
+			a6_7_75_t2(registers, first_halfword, second_halfword);
+		}
+	}
+}
+
 static void a5_3_4(struct registers *registers,
                    uint16_t first_halfword,
                    uint16_t second_halfword)
@@ -147,25 +210,6 @@ static void a5_3_4(struct registers *registers,
 	if ((op2 & 0x05) == 0x05) {
 		a6_7_18_t1(registers, first_halfword, second_halfword);
 	}
-}
-
-static void a6_7_75_t3(struct registers *registers,
-                       uint16_t first_halfword,
-                       uint16_t second_halfword)
-{
-	uint8_t i = (first_halfword & 0x0400) >> 10;
-	uint8_t imm4 = (first_halfword & 0x000F);
-	uint8_t imm3 = (second_halfword & 0x7000) >> 12;
-	uint8_t rd = (0x0F00 & second_halfword) >> 8;
-	uint8_t imm8 = (second_halfword & 0x00FF);
-	uint32_t imm32 = (imm4 * 0x1000)
-	                 + (i * 0x0800)
-	                 + (imm3 * 0x0100)
-	                 + imm8;
-
-	registers->r[rd] = imm32;
-	printf("  MOVW R%d #0x%04X\n", rd, imm32);
-	printf("  > R%d = %08X\n", rd, imm32);
 }
 
 static void a6_7_98_t1(struct registers *registers,
@@ -220,7 +264,7 @@ static void a6_7_128_t1(struct registers *registers,
 
 	printf("  STRH R%d [R%d, #%d]\n", rt, rn, imm32);
 
-	memory_halfword_write(address, value);
+	memory_write_halfword(address, value);
 }
 
 static void step(struct registers *registers)
@@ -280,6 +324,11 @@ static void step(struct registers *registers)
 		uint8_t op = (second_encoded & 0x8000) >> 15;
 
 		if ((op1 == 0b10)
+		     && ((op2 & 0b0100000) == 0b0000000)
+		     && (op == 0)) {
+			a5_3_1(registers, encoded, second_encoded);
+		}
+		else if ((op1 == 0b10)
 		     && ((op2 & 0b0100000) == 0b0100000)
 		     && (op == 0)) {
 			/* A5.3.3 */
@@ -327,7 +376,7 @@ void teensy_3_2_emulate(uint8_t *data, uint32_t length) {
 	}
 
 	printf("\nExecution:\n");
-	for (int i = 0; i < 15; ++i){
+	for (int i = 0; i < 16; ++i){
 		step(&registers);
 	}
 }
