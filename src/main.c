@@ -40,7 +40,7 @@ struct record {
 	uint8_t checksum;
 };
 
-static uint8_t data[0x37F4];
+static uint8_t data[0x20008000];
 
 static uint8_t ascii_hex_to_value(uint8_t c)
 {
