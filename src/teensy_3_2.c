@@ -96,6 +96,24 @@ static void a6_7_18_t1(struct registers *registers,
 	is_branch = true;
 }
 
+static void a6_7_128_t1(struct registers *registers,
+                       uint16_t first_halfword)
+{
+	uint8_t rt = (first_halfword & 0x0007);
+	uint8_t rn = (first_halfword & 0x0038) >> 3;
+	uint8_t imm5 = (first_halfword & 0x07C0) >> 6;
+	uint32_t imm32 = imm5 << 1;
+
+	uint32_t offset_addr = registers->r[rn] + imm32;
+	uint32_t address = offset_addr;
+
+	uint16_t value = registers->r[rt] & 0x0000FFFF;
+
+	printf("  STRH R%d [R%d, #%d]\n", rt, rn, imm32);
+
+	memory_write_halfword(address, value);
+}
+
 static void a6_7_20_t1(struct registers *registers,
                        uint16_t first_halfword)
 {
@@ -166,6 +184,21 @@ static void a6_7_75_t3(struct registers *registers,
 	printf("  > R%d = %08X\n", rd, imm32);
 }
 
+static void a6_7_119_t1(struct registers *registers,
+                        uint16_t first_halfword)
+{
+	uint8_t imm5 = (first_halfword & 0x07C0) >> 6;
+	uint8_t rn = (first_halfword & 0x0038) >> 3;
+	uint8_t rt = (first_halfword & 0x0007);
+	uint32_t imm32 = imm5 << 2;
+
+	uint32_t offset_addr = registers->r[rn] + imm32;
+	uint32_t address = offset_addr;
+	address &= ~(0x00000003);
+	printf("  STR R%d [R%d, #%d]\n", rt, rn, imm32);
+	memory_write_halfword(address, registers->r[rt]);
+}
+
 static void a5_2_1(struct registers *registers,
                    uint16_t first_halfword)
 {
@@ -176,12 +209,35 @@ static void a5_2_1(struct registers *registers,
 	}
 }
 
+static void a5_2_2(struct registers *registers,
+                   uint16_t first_halfword)
+{
+}
+
 static void a5_2_3(struct registers *registers,
                    uint16_t first_halfword)
 {
 	uint8_t opcode = (first_halfword & 0x03C0) >> 6;
 	if ((opcode & 0xE) == 0xC) {
 		a6_7_20_t1(registers, first_halfword);
+	}
+}
+
+static void a5_2_4(struct registers *registers,
+                   uint16_t first_halfword)
+{
+	uint8_t opA = (first_halfword & 0xF000) >> 12;
+	uint8_t opB = (first_halfword & 0x0E00) >> 9;
+
+	if (opA == 0x6) {
+		if ((opB & 0x4) == 0x0) {
+			a6_7_119_t1(registers, first_halfword);
+		}
+	}
+	if (opA == 0x8) {
+		if ((opB & 0x4) == 0x0) {
+			a6_7_128_t1(registers, first_halfword);
+		}
 	}
 }
 
@@ -249,22 +305,17 @@ static void a6_7_98_t1(struct registers *registers,
 	printf("  > R13 = %08X\n", address);
 }
 
-static void a6_7_128_t1(struct registers *registers,
+static void a6_7_43_t1(struct registers *registers,
                        uint16_t first_halfword)
 {
-	uint8_t rt = (first_halfword & 0x0007);
-	uint8_t rn = (first_halfword & 0x0038) >> 3;
-	uint8_t imm5 = (first_halfword & 0x07C0) >> 6;
-	uint32_t imm32 = imm5 << 1;
-
-	uint32_t offset_addr = registers->r[rn] + imm32;
-	uint32_t address = offset_addr;
-
-	uint16_t value = registers->r[rt] & 0x0000FFFF;
-
-	printf("  STRH R%d [R%d, #%d]\n", rt, rn, imm32);
-
-	memory_write_halfword(address, value);
+	/* LDR (literal) */
+	uint8_t rt = (first_halfword & 0x0700) >> 8;
+	uint8_t imm8 = first_halfword;
+	/* TODO: What about Align(PC, 4)? */
+	uint32_t address = (imm8 << 2) + registers->r[15] + 4;
+	registers->r[rt] = word_at_address(address);
+	printf("  LDR R%d [PC, #%d]\n", rt, imm8 << 2);
+	printf("  > R%d = %08X\n", rt, registers->r[rt]);
 }
 
 static void step(struct registers *registers)
@@ -279,18 +330,23 @@ static void step(struct registers *registers)
 	if ((opcode & 0x30) == 0x00) {
 		a5_2_1(registers, encoded);
 	}
+	else if (opcode == 0x10) {
+		a5_2_2(registers, encoded);
+	}
 	else if (opcode == 0x11) {
 		a5_2_3(registers, encoded);
 	}
-	else if ((encoded & 0xF800) == 0x4800) {
-		/* LDR (literal) */
-		uint8_t rt = (encoded & 0x0700) >> 8;
-		uint8_t imm8 = encoded;
-		/* TODO: What about Align(PC, 4)? */
-		uint32_t address = (imm8 << 2) + registers->r[15] + 4;
-		registers->r[rt] = word_at_address(address);
-		printf("  LDR R%d [PC, #%d]\n", rt, imm8 << 2);
-		printf("  > R%d = %08X\n", rt, registers->r[rt]);
+	else if ((opcode & 0x3E) == 0x12) {
+		a6_7_43_t1(registers, encoded);
+	}
+	else if ((opcode & 0x3C) == 0x14) {
+		a5_2_4(registers, encoded);
+	}
+	else if ((opcode & 0x38) == 0x18) {
+		a5_2_4(registers, encoded);
+	}
+	else if ((opcode & 0x38) == 0x20) {
+		a5_2_4(registers, encoded);
 	}
 	else if ((encoded & 0xF000) == 0xB000) {
 		/* A5.2.5 */
@@ -310,9 +366,6 @@ static void step(struct registers *registers)
 				printf("  NOP\n");
 			}
 		}
-	}
-	else if ((encoded & 0xF800) == 0x8000) {
-		a6_7_128_t1(registers, encoded);
 	}
 	else if ((encoded & 0xE000) == 0xE000) {
 		/* 32-bit instruction encoding */
