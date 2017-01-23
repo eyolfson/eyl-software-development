@@ -14,33 +14,60 @@ static bool is_branch;
 
 static void memory_write_halfword(uint32_t address, uint16_t halfword)
 {
+	const char *name = NULL;
+
+	switch (address) {
+	case 0x4003D010:
+		name = "RTC_CR";
+		break;
+	case 0x40048030:
+		name = "SIM_SCGC3";
+		break;
+	case 0x40048038:
+		name = "SIM_SCGC5";
+		break;
+	case 0x4004803C:
+		name = "SIM_SCGC6";
+		break;
+	case 0x40048040:
+		name = "SIM_SCGC7";
+		break;
+	case 0x40052000:
+		name = "WDOG_STCTRLH";
+		break;
+	case 0x4005200E:
+		name = "WDOG_UNLOCK";
+		break;
+	}
+
+	printf("  > MEM[%08X]", address);
+	if (name) {
+		printf(" (%s)", name);
+	}
+	printf(" = %04X", halfword);
+
 	if (address < 0x20008000) {
 		flash[address] = (halfword & 0x00FF);
 		flash[address + 1] = ((halfword & 0xFF00) >> 8);
-		printf("  > MEM[%08X] = %04X\n", address, halfword);
-	}
-	else if (address == 0x40048030) {
-		printf("  > MEM[%08X] (SIM_SCGC3) = %04X\n", address, halfword);
 	}
 	else if (address == 0x40052000) {
 		if (halfword == 0x0010) {
-			printf("  > MEM[%08X] (WDOG_STCTRLH) = %04X (ALLOWUPDATE)\n", address, halfword);
-		}
-		else {
-			printf("  > MEM[%08X] (WDOG_STCTRLH) = %04X\n", address, halfword);
+			printf(" (ALLOWUPDATE)");
 		}
 	}
 	else if (address == 0x4005200E) {
 		if (halfword == 0xC520) {
-			printf("  > MEM[%08X] (WDOG_UNLOCK) = %04X (FIRST CODE)\n", address, halfword);
+			printf(" (FIRST CODE)");
 		}
 		else if (halfword == 0xD928) {
-			printf("  > MEM[%08X] (WDOG_UNLOCK) = %04X (SECOND CODE)\n", address, halfword);
+			printf(" (SECOND CODE)");
 		}
 		else {
-			printf("  > MEM[%08X] (WDOG_UNLOCK) = %04X (RESET)\n", address, halfword);
+			printf(" (RESET)");
 		}
 	}
+
+	printf("\n");
 }
 
 static uint32_t word_at_address(uint32_t base)
@@ -429,7 +456,7 @@ void teensy_3_2_emulate(uint8_t *data, uint32_t length) {
 	}
 
 	printf("\nExecution:\n");
-	for (int i = 0; i < 16; ++i){
+	for (int i = 0; i < 22; ++i){
 		step(&registers);
 	}
 }
