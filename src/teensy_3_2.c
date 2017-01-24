@@ -142,9 +142,9 @@ static void a6_7_18_t1(struct registers *registers,
 
 	/* The PC is a halfword ahead of where it should be, so instead of
 	   adding 4 (for a normal read), we add 2 */
-	uint32_t next_instr_addr = registers->r[15] + 2;
+	uint32_t next_instr_addr = registers->r[15] + 4;
 	uint32_t lr_value = next_instr_addr  | 0x1;
-	uint32_t address = registers->r[15] + 2 + imm32;
+	uint32_t address = registers->r[15] + 4 + imm32;
 	/* Set the last bit to zero */
 	address &= 0xFFFFFFFE;
 
@@ -398,86 +398,106 @@ static void a6_7_43_t1(struct registers *registers,
 	printf("  > R%d = %08X\n", rt, registers->r[rt]);
 }
 
-static void step(struct registers *registers)
+/* 16-bit instruction encoding */
+static void a5_2(struct registers *registers, uint16_t halfword)
 {
-	is_branch = false;
+	printf("%08X: %04X\n", registers->r[15], halfword);
 
-	uint16_t encoded = halfword_at_address(registers->r[15]);
-	printf("%08X: %04X\n", registers->r[15], encoded);
-
-	uint8_t opcode = (encoded & 0xFC00) >> 10;
+	uint8_t opcode = (halfword & 0xFC00) >> 10;
 
 	if ((opcode & 0x30) == 0x00) {
-		a5_2_1(registers, encoded);
+		a5_2_1(registers, halfword);
 	}
 	else if (opcode == 0x10) {
-		a5_2_2(registers, encoded);
+		a5_2_2(registers, halfword);
 	}
 	else if (opcode == 0x11) {
-		a5_2_3(registers, encoded);
+		a5_2_3(registers, halfword);
 	}
 	else if ((opcode & 0x3E) == 0x12) {
-		a6_7_43_t1(registers, encoded);
+		a6_7_43_t1(registers, halfword);
 	}
 	else if ((opcode & 0x3C) == 0x14) {
-		a5_2_4(registers, encoded);
+		a5_2_4(registers, halfword);
 	}
 	else if ((opcode & 0x38) == 0x18) {
-		a5_2_4(registers, encoded);
+		a5_2_4(registers, halfword);
 	}
 	else if ((opcode & 0x38) == 0x20) {
-		a5_2_4(registers, encoded);
+		a5_2_4(registers, halfword);
 	}
-	else if ((encoded & 0xF000) == 0xB000) {
+	else if ((halfword & 0xF000) == 0xB000) {
 		/* A5.2.5 */
-		uint8_t opcode = (encoded & 0x0FE0) >> 5;
+		uint8_t opcode = (halfword & 0x0FE0) >> 5;
 		if ((opcode & 0x70) == 0x20) {
-			a6_7_98_t1(registers, encoded);
+			a6_7_98_t1(registers, halfword);
 		}
 		else if ((opcode & 0x70) == 0x60) {
 			/* POP */
 		}
 		else if ((opcode & 0x78) == 0x78) {
 			/* If-Then and hints */
-			uint8_t opA = (encoded & 0x00F0) >> 4;
-			uint8_t opB = (encoded & 0x000F);
+			uint8_t opA = (halfword & 0x00F0) >> 4;
+			uint8_t opB = (halfword & 0x000F);
 			if (opA == 0 && opB == 0) {
 				/* A6.7.87 T1 */
 				printf("  NOP\n");
 			}
 		}
 	}
-	else if ((encoded & 0xE000) == 0xE000) {
-		/* 32-bit instruction encoding */
-		registers->r[15] += 2;
-		uint16_t second_encoded = halfword_at_address(registers->r[15]);
-		printf("          %04X\n", second_encoded);
-		uint8_t op1 = (encoded & 0x1800) >> 11;
-		uint8_t op2 = (encoded & 0x07F0) >> 4;
-		uint8_t op = (second_encoded & 0x8000) >> 15;
+}
 
-		if ((op1 == 0b10)
-		     && ((op2 & 0b0100000) == 0b0000000)
-		     && (op == 0)) {
-			a5_3_1(registers, encoded, second_encoded);
-		}
-		else if ((op1 == 0b10)
-		     && ((op2 & 0b0100000) == 0b0100000)
-		     && (op == 0)) {
-			/* A5.3.3 */
-			op = ((encoded & 0x01F0) >> 4);
-			if (op == 0x04) {
-				a6_7_75_t3(registers, encoded, second_encoded);
-			}
-		}
-		else if ((op1 == 0b10)
-		         && (op == 1)) {
-			a5_3_4(registers, encoded, second_encoded);
+/* 32-bit instruction encoding */
+static void a5_3(struct registers *registers,
+                 uint16_t first_halfword,
+                 uint16_t second_halfword)
+{
+	printf("%08X: %04X %04X\n", registers->r[15], first_halfword, second_halfword);
+
+	uint8_t op1 = (first_halfword & 0x1800) >> 11;
+	uint8_t op2 = (first_halfword & 0x07F0) >> 4;
+	uint8_t op = (second_halfword & 0x8000) >> 15;
+
+	if ((op1 == 0b10)
+	     && ((op2 & 0b0100000) == 0b0000000)
+	     && (op == 0)) {
+		a5_3_1(registers, first_halfword, second_halfword);
+	}
+	else if ((op1 == 0b10)
+	     && ((op2 & 0b0100000) == 0b0100000)
+	     && (op == 0)) {
+		/* A5.3.3 */
+		op = ((first_halfword & 0x01F0) >> 4);
+		if (op == 0x04) {
+			a6_7_75_t3(registers, first_halfword, second_halfword);
 		}
 	}
+	else if ((op1 == 0b10)
+	         && (op == 1)) {
+		a5_3_4(registers, first_halfword, second_halfword);
+	}
+}
 
-	if (!is_branch) {
-		registers->r[15] += 2;
+static void step(struct registers *registers)
+{
+	is_branch = false;
+
+	uint16_t halfword = halfword_at_address(registers->r[15]);
+	if (((halfword & 0xE000) == 0xE000)
+	    && ((halfword & 0x1800) != 0x0000)) {
+		uint16_t first_halfword = halfword;
+		uint16_t second_halfword
+			= halfword_at_address(registers->r[15] + 2);
+		a5_3(registers, first_halfword, second_halfword);
+		if (!is_branch) {
+			registers->r[15] += 4;
+		}
+	}
+	else {
+		a5_2(registers, halfword);
+		if (!is_branch) {
+			registers->r[15] += 2;
+		}
 	}
 }
 
