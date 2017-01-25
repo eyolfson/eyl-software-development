@@ -23,6 +23,9 @@ static const char *get_address_name(uint32_t address)
 	case 0x40048030:
 		name = "SIM_SCGC3";
 		break;
+	case 0x40048034:
+		name = "SIM_SCGC4";
+		break;
 	case 0x40048038:
 		name = "SIM_SCGC5";
 		break;
