@@ -1,11 +1,34 @@
 #include "teensy_3_2.h"
 
+#include <assert.h>
 #include <stdbool.h>
 #include <stdio.h>
 
 struct registers {
 	uint32_t r[16];
 	uint32_t epsr;
+};
+
+struct ThumbExpandImm_C_Result {
+	uint32_t imm32;
+	bool carry;
+};
+
+struct ThumbExpandImm_C_Result ThumbExpandImm_C(uint16_t imm12, bool carry) {
+	struct ThumbExpandImm_C_Result result;
+
+	if ((imm12 & 0xC00) == 0x000) {
+		assert(false);
+	}
+	else {
+		uint8_t rotate = (imm12 & 0xF80) >> 7;
+		uint32_t unrotated_value = 0x80 + (imm12 & 0x7F);
+		uint32_t value = unrotated_value << (32 - rotate);
+		result.imm32 = value;
+		result.carry = false;
+	}
+
+	return result;
 };
 
 static uint8_t *flash;
@@ -123,6 +146,37 @@ static uint16_t halfword_at_address(uint32_t base)
 
 static void set_bit(uint32_t *v, uint8_t i) { *v |= (1 << i); }
 
+static void a6_7_8_t1(struct registers *registers,
+                      uint16_t first_halfword,
+                      uint16_t second_halfword)
+{
+	uint8_t i = (first_halfword & 0x0400) >> 10;
+	uint8_t S = (first_halfword & 0x0010) >> 4;
+	uint8_t rn = (first_halfword & 0x000F);
+	uint8_t imm3 = (second_halfword & 0x7000) >> 12;
+	uint8_t rd = (second_halfword & 0x0F00) >> 8;
+	uint8_t imm8 = (second_halfword & 0x00FF);
+
+	if (rd == 0xF && S == 1) {
+		assert(false);
+	}
+
+	uint16_t imm12 = (i * 0x800)
+	                 + (imm3 * 0x100)
+	                 + imm8;
+
+	struct ThumbExpandImm_C_Result result = ThumbExpandImm_C(imm12, false);
+
+	printf("  AND");
+	if (S) {
+		printf("S");
+	}
+	printf(" R%d R%d #0x%08X\n", rd, rn, result.imm32);
+
+	registers->r[rd] = registers->r[rn] & result.imm32;
+	printf("  > R%d = %08X\n", rd, registers->r[rd]);
+}
+
 static void a6_7_18_t1(struct registers *registers,
                        uint16_t first_halfword,
                        uint16_t second_halfword)
@@ -217,16 +271,10 @@ static void a6_7_75_t2(struct registers *registers,
 	                 + (imm3 * 0x100)
 	                 + imm8;
 
-	if ((imm12 & 0xC00) == 0x000) {
-	}
-	else {
-		uint8_t rotate = (imm12 & 0xF80) >> 7;
-		uint32_t unrotated_value = 0x80 + (imm12 & 0x7F);
-		uint32_t result = unrotated_value << (32 - rotate);
-		registers->r[rd] = result;
-		printf("  MOV.W R%d #0x%08X\n", rd, result);
-		printf("  > R%d = %08X\n", rd, result);
-	}
+	struct ThumbExpandImm_C_Result result = ThumbExpandImm_C(imm12, false);
+	registers->r[rd] = result.imm32;
+	printf("  MOV.W R%d #0x%08X\n", rd, result.imm32);
+	printf("  > R%d = %08X\n", rd, result.imm32);
 }
 
 static void a6_7_75_t3(struct registers *registers,
@@ -552,7 +600,7 @@ void teensy_3_2_emulate(uint8_t *data, uint32_t length) {
 	}
 
 	printf("\nExecution:\n");
-	for (int i = 0; i < 23; ++i){
+	for (int i = 0; i < 24; ++i){
 		step(&registers);
 	}
 }
