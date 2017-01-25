@@ -279,58 +279,22 @@ static void a6_7_119_t1(struct registers *registers,
 	memory_write_word(address, registers->r[rt]);
 }
 
-static void a5_2_1(struct registers *registers,
-                   uint16_t first_halfword)
-{
-	uint8_t opcode = (first_halfword & 0x3E00) >> 9;
-
-	if ((opcode & 0x1C) == 0x10) {
-		a6_7_75_t1(registers, first_halfword);
-	}
-}
-
-static void a5_2_2(struct registers *registers,
-                   uint16_t first_halfword)
-{
-}
-
-static void a5_2_3(struct registers *registers,
-                   uint16_t first_halfword)
-{
-	uint8_t opcode = (first_halfword & 0x03C0) >> 6;
-	if ((opcode & 0xE) == 0xC) {
-		a6_7_20_t1(registers, first_halfword);
-	}
-}
-
-static void a5_2_4(struct registers *registers,
-                   uint16_t first_halfword)
-{
-	uint8_t opA = (first_halfword & 0xF000) >> 12;
-	uint8_t opB = (first_halfword & 0x0E00) >> 9;
-
-	if (opA == 0x6) {
-		if ((opB & 0x4) == 0x0) {
-			a6_7_119_t1(registers, first_halfword);
-		}
-		else {
-			a6_7_42_t1(registers, first_halfword);
-		}
-	}
-	if (opA == 0x8) {
-		if ((opB & 0x4) == 0x0) {
-			a6_7_128_t1(registers, first_halfword);
-		}
-	}
-}
-
 static void a5_3_1(struct registers *registers,
                    uint16_t first_halfword,
                    uint16_t second_halfword)
 {
 	uint8_t op = (first_halfword & 0x01F0) >> 4;
 	uint8_t rn = (first_halfword & 0x000F);
-	if ((op & 0x1E)  == 0x04) {
+	uint8_t rd = (second_halfword & 0x0F00) >> 8;
+
+	if ((op & 0x1E) == 0x00) {
+		if (!(rd == 0xF)) {
+			a6_7_8_t1(registers, first_halfword, second_halfword);
+		}
+		else if (rd == 0xF) {
+		}
+	}
+	else if ((op & 0x1E) == 0x04) {
 		if (!(rn == 0xF)) {
 		}
 		else {
@@ -401,6 +365,51 @@ static void a6_7_43_t1(struct registers *registers,
 	printf("  > R%d = %08X\n", rt, registers->r[rt]);
 }
 
+static void a5_2_1(struct registers *registers,
+                   uint16_t first_halfword)
+{
+	uint8_t opcode = (first_halfword & 0x3E00) >> 9;
+
+	if ((opcode & 0x1C) == 0x10) {
+		a6_7_75_t1(registers, first_halfword);
+	}
+}
+
+static void a5_2_2(struct registers *registers,
+                   uint16_t first_halfword)
+{
+}
+
+static void a5_2_3(struct registers *registers,
+                   uint16_t first_halfword)
+{
+	uint8_t opcode = (first_halfword & 0x03C0) >> 6;
+	if ((opcode & 0xE) == 0xC) {
+		a6_7_20_t1(registers, first_halfword);
+	}
+}
+
+static void a5_2_4(struct registers *registers,
+                   uint16_t first_halfword)
+{
+	uint8_t opA = (first_halfword & 0xF000) >> 12;
+	uint8_t opB = (first_halfword & 0x0E00) >> 9;
+
+	if (opA == 0x6) {
+		if ((opB & 0x4) == 0x0) {
+			a6_7_119_t1(registers, first_halfword);
+		}
+		else {
+			a6_7_42_t1(registers, first_halfword);
+		}
+	}
+	if (opA == 0x8) {
+		if ((opB & 0x4) == 0x0) {
+			a6_7_128_t1(registers, first_halfword);
+		}
+	}
+}
+
 /* 16-bit instruction encoding */
 static void a5_2(struct registers *registers, uint16_t halfword)
 {
@@ -450,6 +459,16 @@ static void a5_2(struct registers *registers, uint16_t halfword)
 	}
 }
 
+static void a5_3_3(struct registers *registers,
+                   uint16_t first_halfword,
+                   uint16_t second_halfword)
+{
+	uint8_t op = ((first_halfword & 0x01F0) >> 4);
+	if (op == 0x04) {
+		a6_7_75_t3(registers, first_halfword, second_halfword);
+	}
+}
+
 /* 32-bit instruction encoding */
 static void a5_3(struct registers *registers,
                  uint16_t first_halfword,
@@ -461,23 +480,24 @@ static void a5_3(struct registers *registers,
 	uint8_t op2 = (first_halfword & 0x07F0) >> 4;
 	uint8_t op = (second_halfword & 0x8000) >> 15;
 
-	if ((op1 == 0b10)
-	     && ((op2 & 0b0100000) == 0b0000000)
-	     && (op == 0)) {
-		a5_3_1(registers, first_halfword, second_halfword);
+	if (op1 == 0b01) {
+
 	}
-	else if ((op1 == 0b10)
-	     && ((op2 & 0b0100000) == 0b0100000)
-	     && (op == 0)) {
-		/* A5.3.3 */
-		op = ((first_halfword & 0x01F0) >> 4);
-		if (op == 0x04) {
-			a6_7_75_t3(registers, first_halfword, second_halfword);
+	else if (op1 == 0b10) {
+		if (((op2 & 0b0100000) == 0b0000000)
+		     && (op == 0)) {
+			a5_3_1(registers, first_halfword, second_halfword);
+		}
+		else if (((op2 & 0b0100000) == 0b0100000)
+		     && (op == 0)) {
+			a5_3_3(registers, first_halfword, second_halfword);
+		}
+		else if ((op == 1)) {
+			a5_3_4(registers, first_halfword, second_halfword);
 		}
 	}
-	else if ((op1 == 0b10)
-	         && (op == 1)) {
-		a5_3_4(registers, first_halfword, second_halfword);
+	else if (op1 == 0b11) {
+
 	}
 }
 
