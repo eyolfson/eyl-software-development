@@ -18,7 +18,22 @@ struct ThumbExpandImm_C_Result ThumbExpandImm_C(uint16_t imm12, bool carry) {
 	struct ThumbExpandImm_C_Result result;
 
 	if ((imm12 & 0xC00) == 0x000) {
-		assert(false);
+		uint8_t switch_value = (imm12 & 0x300) >> 8;
+		switch (switch_value) {
+		case 0b00:
+			result.imm32 = (imm12 & 0x0FF);
+			break;
+		case 0b01:
+			assert(false);
+			break;
+		case 0b10:
+			assert(false);
+			break;
+		case 0b11:
+			assert(false);
+			break;
+		}
+		result.carry = carry;
 	}
 	else {
 		uint8_t rotate = (imm12 & 0xF80) >> 7;
@@ -63,6 +78,15 @@ static const char *get_address_name(uint32_t address)
 		break;
 	case 0x4005200E:
 		name = "WDOG_UNLOCK";
+		break;
+	case 0x4007D000:
+		name = "PMC_LVDSC1";
+		break;
+	case 0x4007D001:
+		name = "PMC_LVDSC2";
+		break;
+	case 0x4007D002:
+		name = "PMC_REGSC";
 		break;
 	}
 
@@ -124,6 +148,22 @@ static uint32_t word_at_address(uint32_t base)
 	       + (flash[base + 3] * 0x1000000);
 }
 
+static uint8_t memory_read_byte(uint32_t address)
+{
+	if (address < 0x20008000) {
+		return flash[address];
+	}
+	else {
+		const char *name = get_address_name(address);
+		printf("  > UMem[%08X, 1]", address);
+		if (name) {
+			printf(" (%s)", name);
+		}
+		printf(" = 0 (DEFAULT)\n");
+		return 0;
+	}
+}
+
 static uint32_t memory_read_word(uint32_t address)
 {
 	if (address < 0x20008000) {
@@ -131,9 +171,11 @@ static uint32_t memory_read_word(uint32_t address)
 	}
 	else {
 		const char *name = get_address_name(address);
+		printf("  > UMem[%08X, 4]", address);
 		if (name) {
-			printf("  > %s defaulted to 0\n", name);
+			printf(" (%s)", name);
 		}
+		printf(" = 0 (DEFAULT)\n");
 		return 0;
 	}
 }
@@ -171,7 +213,7 @@ static void a6_7_8_t1(struct registers *registers,
 	if (S) {
 		printf("S");
 	}
-	printf(" R%d R%d #0x%08X\n", rd, rn, result.imm32);
+	printf(" R%d, R%d, #0x%08X\n", rd, rn, result.imm32);
 
 	registers->r[rd] = registers->r[rn] & result.imm32;
 	printf("  > R%d = %08X\n", rd, registers->r[rd]);
@@ -212,6 +254,23 @@ static void a6_7_18_t1(struct registers *registers,
 	printf("  > R15 = %08X\n", address);
 
 	is_branch = true;
+}
+
+static void a6_7_45_t1(struct registers *registers,
+                       uint16_t halfword)
+{
+	uint8_t imm5 = (halfword & 0x07C0) >> 6;
+	uint8_t rn = (halfword & 0x0038) >> 3;
+	uint8_t rt = (halfword & 0x0007);
+	uint32_t imm32 = imm5;
+
+	uint32_t offset_addr = registers->r[rn] + imm32;
+	uint32_t address = offset_addr;
+
+	printf("  LDRB R%d [R%d, #0x%08X]\n", rt, rn, imm32);
+	uint32_t value = memory_read_byte(address);
+	registers->r[rt] = value;
+	printf("  > R%d = %08X\n", rt, value);
 }
 
 static void a6_7_128_t1(struct registers *registers,
@@ -438,23 +497,79 @@ static void a5_2_3(struct registers *registers,
 }
 
 static void a5_2_4(struct registers *registers,
-                   uint16_t first_halfword)
+                   uint16_t halfword)
 {
-	uint8_t opA = (first_halfword & 0xF000) >> 12;
-	uint8_t opB = (first_halfword & 0x0E00) >> 9;
+	uint8_t opA = (halfword & 0xF000) >> 12;
+	uint8_t opB = (halfword & 0x0E00) >> 9;
 
 	if (opA == 0x6) {
 		if ((opB & 0x4) == 0x0) {
-			a6_7_119_t1(registers, first_halfword);
+			a6_7_119_t1(registers, halfword);
 		}
 		else {
-			a6_7_42_t1(registers, first_halfword);
+			a6_7_42_t1(registers, halfword);
 		}
 	}
-	if (opA == 0x8) {
+	else if (opA == 0x7) {
 		if ((opB & 0x4) == 0x0) {
-			a6_7_128_t1(registers, first_halfword);
 		}
+		else {
+			a6_7_45_t1(registers, halfword);
+		}
+	}
+	else if (opA == 0x8) {
+		if ((opB & 0x4) == 0x0) {
+			a6_7_128_t1(registers, halfword);
+		}
+	}
+}
+
+static void a6_7_12_t1(struct registers *registers, uint16_t halfword)
+{
+	uint8_t cond = (halfword & 0x0F00) >> 8;
+	uint8_t imm8 = (halfword & 0x00FF);
+	uint32_t imm32 = imm8 << 1;
+
+	uint32_t address = registers->r[15] + 4 + imm32;
+	printf("  B[todo] %08X\n", address);
+}
+
+static void a6_7_87_t1(struct registers *registers, uint16_t halfword)
+{
+	printf("  NOP\n");
+}
+
+static void a5_2_5(struct registers *registers, uint16_t halfword)
+{
+	uint8_t opcode = (halfword & 0x0FE0) >> 5;
+	if ((opcode & 0x70) == 0x20) {
+		a6_7_98_t1(registers, halfword);
+	}
+	else if ((opcode & 0x70) == 0x60) {
+		/* POP */
+	}
+	else if ((opcode & 0x78) == 0x78) {
+		uint8_t opA = (halfword & 0x00F0) >> 4;
+		uint8_t opB = (halfword & 0x000F);
+		if (opA == 0 && opB == 0) {
+			a6_7_87_t1(registers, halfword);
+		}
+	}
+}
+
+static void a5_2_6(struct registers *registers, uint16_t halfword)
+{
+	uint8_t opcode = (halfword & 0x0F00) >> 8;
+	if (!((opcode & 0xE) == 0xE)) {
+		a6_7_12_t1(registers, halfword);
+	}
+	else if (opcode == 0xE) {
+		assert(false); // UNDEFINED
+	}
+	else if (opcode == 0xF) {
+	}
+	else {
+		assert(false);
 	}
 }
 
@@ -486,24 +601,11 @@ static void a5_2(struct registers *registers, uint16_t halfword)
 	else if ((opcode & 0x38) == 0x20) {
 		a5_2_4(registers, halfword);
 	}
-	else if ((halfword & 0xF000) == 0xB000) {
-		/* A5.2.5 */
-		uint8_t opcode = (halfword & 0x0FE0) >> 5;
-		if ((opcode & 0x70) == 0x20) {
-			a6_7_98_t1(registers, halfword);
-		}
-		else if ((opcode & 0x70) == 0x60) {
-			/* POP */
-		}
-		else if ((opcode & 0x78) == 0x78) {
-			/* If-Then and hints */
-			uint8_t opA = (halfword & 0x00F0) >> 4;
-			uint8_t opB = (halfword & 0x000F);
-			if (opA == 0 && opB == 0) {
-				/* A6.7.87 T1 */
-				printf("  NOP\n");
-			}
-		}
+	else if ((opcode & 0b111100) == 0b101100) {
+		a5_2_5(registers, halfword);
+	}
+	else if ((opcode & 0b111100) == 0b110100) {
+		a5_2_6(registers, halfword);
 	}
 }
 
@@ -600,7 +702,7 @@ void teensy_3_2_emulate(uint8_t *data, uint32_t length) {
 	}
 
 	printf("\nExecution:\n");
-	for (int i = 0; i < 24; ++i){
+	for (int i = 0; i < 31; ++i){
 		step(&registers);
 	}
 }
