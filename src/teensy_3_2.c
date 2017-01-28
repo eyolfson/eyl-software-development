@@ -113,6 +113,27 @@ static const char *get_address_name(uint32_t address)
 	return name;
 }
 
+static void memory_write_byte(uint32_t address, uint8_t byte)
+{
+	const char *name = get_address_name(address);
+
+	printf("  > MemU[%08X, 1]", address);
+	if (name) {
+		printf(" (%s)", name);
+	}
+	printf(" = %02X", byte);
+
+	if (address < 0x20008000) {
+		flash[address] = byte;
+	}
+
+	if (address >= 0xE0000000 && address <= 0xE000EFFF) {
+		printf(" (System Control Space - SCS)");
+	}
+
+	printf("\n");
+}
+
 static void memory_write_halfword(uint32_t address, uint16_t halfword)
 {
 	const char *name = get_address_name(address);
@@ -518,6 +539,50 @@ static void a6_7_119_t1(struct registers *registers,
 	memory_write_word(address, registers->r[rt]);
 }
 
+static void a6_7_121_t3(struct registers *registers,
+                        uint16_t first_halfword,
+                        uint16_t second_halfword)
+{
+	uint8_t n = (first_halfword & 0x000F) >> 0;
+	uint8_t t = (second_halfword & 0xF000) >> 12;
+	uint8_t P = (second_halfword & 0x0400) >> 10;
+	uint8_t U = (second_halfword & 0x0200) >> 9;
+	uint8_t W = (second_halfword & 0x0100) >> 8;
+	uint8_t imm8 = (second_halfword & 0x00FF) >> 0;
+
+	uint32_t imm32 = imm8;
+	bool index = P == 1;
+	bool add = U == 1;
+	bool wback = W == 1;
+
+	uint32_t offset_addr;
+	if (add) { offset_addr = registers->r[n] + imm32; }
+	else     { offset_addr = registers->r[n] - imm32; }
+	uint32_t address;
+	if (index) { address = offset_addr; }
+	else       { address = registers->r[n]; }
+
+	if (index) {
+		if (!wback) {
+			printf("  STRB R%d [R%d, #%d]\n", t, n, imm32);
+		}
+		else {
+			printf("  STRB R%d [R%d, #%d]!\n", t, n, imm32);
+		}
+	}
+	else {
+		printf("  STRB R%d [R%d] #%d\n", t, n, imm32);
+	}
+
+	uint8_t value = registers->r[t] & 0x000000FF;
+	memory_write_byte(address, value);
+
+	if (wback) {
+		registers->r[n] = offset_addr;
+		printf("  > R%d = %08X\n", n, offset_addr);
+	}
+}
+
 static void a6_7_128_t1(struct registers *registers,
                        uint16_t first_halfword)
 {
@@ -810,6 +875,21 @@ static void a5_3_4(struct registers *registers,
 	}
 }
 
+static void a5_3_10(struct registers *registers,
+                    uint16_t first_halfword,
+                    uint16_t second_halfword)
+{
+	uint8_t op1 = (first_halfword & 0x00E0) >> 5;
+	uint8_t op2 = (second_halfword & 0x0FC0) >> 6;
+
+	if (op1 == 0b100) {
+
+	}
+	else if ((op1 == 0b000) && ((op2 & 0b100000) == 0b100000)) {
+		a6_7_121_t3(registers, first_halfword, second_halfword);
+	}
+}
+
 /* 32-bit instruction encoding */
 static void a5_3(struct registers *registers,
                  uint16_t first_halfword,
@@ -838,7 +918,9 @@ static void a5_3(struct registers *registers,
 		}
 	}
 	else if (op1 == 0b11) {
-
+		if ((op2 & 0b1100100) == 0b0000000) {
+			a5_3_10(registers, first_halfword, second_halfword);
+		}
 	}
 }
 
@@ -893,7 +975,7 @@ void teensy_3_2_emulate(uint8_t *data, uint32_t length) {
 	}
 
 	printf("\nExecution:\n");
-	for (int i = 0; i < 54; ++i){
+	for (int i = 0; i < 59; ++i){
 		step(&registers);
 	}
 }
