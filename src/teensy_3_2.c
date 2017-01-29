@@ -539,22 +539,10 @@ static void a6_7_119_t1(struct registers *registers,
 	memory_write_word(address, registers->r[rt]);
 }
 
-static void a6_7_121_t3(struct registers *registers,
-                        uint16_t first_halfword,
-                        uint16_t second_halfword)
+static void STRB(struct registers *registers,
+                 uint8_t t, uint8_t n, int32_t imm32,
+                 bool index, bool add, bool wback)
 {
-	uint8_t n = (first_halfword & 0x000F) >> 0;
-	uint8_t t = (second_halfword & 0xF000) >> 12;
-	uint8_t P = (second_halfword & 0x0400) >> 10;
-	uint8_t U = (second_halfword & 0x0200) >> 9;
-	uint8_t W = (second_halfword & 0x0100) >> 8;
-	uint8_t imm8 = (second_halfword & 0x00FF) >> 0;
-
-	uint32_t imm32 = imm8;
-	bool index = P == 1;
-	bool add = U == 1;
-	bool wback = W == 1;
-
 	uint32_t offset_addr;
 	if (add) { offset_addr = registers->r[n] + imm32; }
 	else     { offset_addr = registers->r[n] - imm32; }
@@ -581,6 +569,40 @@ static void a6_7_121_t3(struct registers *registers,
 		registers->r[n] = offset_addr;
 		printf("  > R%d = %08X\n", n, offset_addr);
 	}
+}
+
+static void a6_7_121_t1(struct registers *registers,
+                        uint16_t halfword)
+{
+	uint8_t imm5 = (halfword & 0x07C00) >> 6;
+	uint8_t n = (halfword & 0x0038) >> 3;
+	uint8_t t = (halfword & 0x0007) >> 0;
+
+	uint32_t imm32 = imm5;
+	bool index = true;
+	bool add = true;
+	bool wback = false;
+
+	STRB(registers, t, n, imm32, index, add, wback);
+}
+
+static void a6_7_121_t3(struct registers *registers,
+                        uint16_t first_halfword,
+                        uint16_t second_halfword)
+{
+	uint8_t n = (first_halfword & 0x000F) >> 0;
+	uint8_t t = (second_halfword & 0xF000) >> 12;
+	uint8_t P = (second_halfword & 0x0400) >> 10;
+	uint8_t U = (second_halfword & 0x0200) >> 9;
+	uint8_t W = (second_halfword & 0x0100) >> 8;
+	uint8_t imm8 = (second_halfword & 0x00FF) >> 0;
+
+	uint32_t imm32 = imm8;
+	bool index = P == 1;
+	bool add = U == 1;
+	bool wback = W == 1;
+
+	STRB(registers, t, n, imm32, index, add, wback);
 }
 
 static void a6_7_128_t1(struct registers *registers,
@@ -728,7 +750,7 @@ static void a5_2_4(struct registers *registers,
 	uint8_t opA = (halfword & 0xF000) >> 12;
 	uint8_t opB = (halfword & 0x0E00) >> 9;
 
-	if (opA == 0x6) {
+	if (opA == 0b0110) {
 		if ((opB & 0x4) == 0x0) {
 			a6_7_119_t1(registers, halfword);
 		}
@@ -736,8 +758,9 @@ static void a5_2_4(struct registers *registers,
 			a6_7_42_t1(registers, halfword);
 		}
 	}
-	else if (opA == 0x7) {
-		if ((opB & 0x4) == 0x0) {
+	else if (opA == 0b0111) {
+		if ((opB & 0b100) == 0b000) {
+			a6_7_121_t1(registers, halfword);
 		}
 		else {
 			a6_7_45_t1(registers, halfword);
@@ -806,7 +829,7 @@ static void a5_2(struct registers *registers, uint16_t halfword)
 	else if (opcode == 0x11) {
 		a5_2_3(registers, halfword);
 	}
-	else if ((opcode & 0x3E) == 0x12) {
+	else if ((opcode & 0b111110) == 0b010010) {
 		a6_7_43_t1(registers, halfword);
 	}
 	else if ((opcode & 0x3C) == 0x14) {
@@ -817,6 +840,12 @@ static void a5_2(struct registers *registers, uint16_t halfword)
 	}
 	else if ((opcode & 0x38) == 0x20) {
 		a5_2_4(registers, halfword);
+	}
+	else if ((opcode & 0b111110) == 0b101000) {
+		printf("  ADR? a5_2\n");
+	}
+	else if ((opcode & 0b111110) == 0b101010) {
+		printf("  ADD? a5_2\n");
 	}
 	else if ((opcode & 0b111100) == 0b101100) {
 		a5_2_5(registers, halfword);
