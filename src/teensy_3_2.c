@@ -93,11 +93,38 @@ static const char *get_address_name(uint32_t address)
 	case 0x40048040:
 		name = "SIM_SCGC7";
 		break;
+	case 0x40048044:
+		name = "SIM_CLKDIV1";
+		break;
+	case 0x40048048:
+		name = "SIM_CLKDIV2";
+		break;
 	case 0x40052000:
 		name = "WDOG_STCTRLH";
 		break;
 	case 0x4005200E:
 		name = "WDOG_UNLOCK";
+		break;
+	case 0x40064000:
+		name = "MCG_C1";
+		break;
+	case 0x40064001:
+		name = "MCG_C2";
+		break;
+	case 0x40064002:
+		name = "MCG_C3";
+		break;
+	case 0x40064003:
+		name = "MCG_C4";
+		break;
+	case 0x40064004:
+		name = "MCG_C5";
+		break;
+	case 0x40064005:
+		name = "MCG_C6";
+		break;
+	case 0x40064006:
+		name = "MCG_S";
 		break;
 	case 0x4007D000:
 		name = "PMC_LVDSC1";
@@ -370,6 +397,17 @@ static void a6_7_21_t1(struct registers *registers,
 		printf("  > R15 = %08X\n", address);
 		is_branch = true;
 	}
+}
+
+static void a6_7_27_t1(struct registers *registers, uint16_t halfword)
+{
+	uint8_t n = (halfword & 0x0700) >> 8;
+	uint8_t imm8 = (halfword & 0x00FF) >> 0;
+
+	uint32_t imm32 = imm8;
+
+	// TODO: CMP
+	printf("  CMP R%d, #%d\n", n, imm32);
 }
 
 static void a6_7_28_t1(struct registers *registers, uint16_t halfword)
@@ -666,7 +704,7 @@ static void a5_2_1(struct registers *registers,
 		a6_7_75_t1(registers, halfword);
 	}
 	else if ((opcode & 0b11100) == 0b10100) {
-		printf("  CMP?\n");
+		a6_7_27_t1(registers, halfword);
 	}
 	else if ((opcode & 0b11100) == 0b11000) {
 		printf("  ADD?\n");
@@ -1004,7 +1042,7 @@ void teensy_3_2_emulate(uint8_t *data, uint32_t length) {
 	}
 
 	printf("\nExecution:\n");
-	for (int i = 0; i < 59; ++i){
+	for (int i = 0; i < 114; ++i){
 		step(&registers);
 	}
 }
