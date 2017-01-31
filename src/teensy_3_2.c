@@ -78,6 +78,33 @@ static const char *get_address_name(uint32_t address)
 	case 0x4003D010:
 		name = "RTC_CR";
 		break;
+	case 0x40047000:
+		name = "SIM_SOPT1";
+		break;
+	case 0x40047004:
+		name = "SIM_SOPT1CFG";
+		break;
+	case 0x40048004:
+		name = "SIM_SOPT2";
+		break;
+	case 0x4004800C:
+		name = "SIM_SOPT4";
+		break;
+	case 0x40048010:
+		name = "SIM_SOPT5";
+		break;
+	case 0x40048018:
+		name = "SIM_SOPT7";
+		break;
+	case 0x40048024:
+		name = "SIM_SDID";
+		break;
+	case 0x40048028:
+		name = "SIM_SCGC1";
+		break;
+	case 0x4004802C:
+		name = "SIM_SCGC2";
+		break;
 	case 0x40048030:
 		name = "SIM_SCGC3";
 		break;
@@ -98,6 +125,12 @@ static const char *get_address_name(uint32_t address)
 		break;
 	case 0x40048048:
 		name = "SIM_CLKDIV2";
+		break;
+	case 0x4004804C:
+		name = "SIM_FCFG1";
+		break;
+	case 0x40048050:
+		name = "SIM_FCFG2";
 		break;
 	case 0x40052000:
 		name = "WDOG_STCTRLH";
@@ -165,7 +198,7 @@ static void memory_write_halfword(uint32_t address, uint16_t halfword)
 {
 	const char *name = get_address_name(address);
 
-	printf("  > MEM[%08X]", address);
+	printf("  > MemU[%08X, 4]", address);
 	if (name) {
 		printf(" (%s)", name);
 	}
@@ -199,7 +232,7 @@ static void memory_write_word(uint32_t address, uint32_t word)
 {
 	const char *name = get_address_name(address);
 
-	printf("  > MEM[%08X]", address);
+	printf("  > MemU[%08X, 4]", address);
 	if (name) {
 		printf(" (%s)", name);
 	}
@@ -223,7 +256,7 @@ static uint8_t memory_read_byte(uint32_t address)
 	}
 	else {
 		const char *name = get_address_name(address);
-		printf("  > UMem[%08X, 1]", address);
+		printf("  > MemU[%08X, 1]", address);
 		if (name) {
 			printf(" (%s)", name);
 		}
@@ -563,18 +596,69 @@ static void a6_7_98_t1(struct registers *registers,
 	printf("  > R13 = %08X\n", address);
 }
 
-static void a6_7_119_t1(struct registers *registers,
-                        uint16_t first_halfword)
+static void STR_immediate(struct registers *registers,
+                          uint8_t t, uint8_t n, int32_t imm32,
+                          bool index, bool add, bool wback)
 {
-	uint8_t imm5 = (first_halfword & 0x07C0) >> 6;
-	uint8_t rn = (first_halfword & 0x0038) >> 3;
-	uint8_t rt = (first_halfword & 0x0007);
-	uint32_t imm32 = imm5 << 2;
+	uint32_t offset_addr;
+	if (add) { offset_addr = registers->r[n] + imm32; }
+	else     { offset_addr = registers->r[n] - imm32; }
+	uint32_t address;
+	if (index) { address = offset_addr; }
+	else       { address = registers->r[n]; }
 
-	uint32_t offset_addr = registers->r[rn] + imm32;
-	uint32_t address = offset_addr;
-	printf("  STR R%d [R%d, #%d]\n", rt, rn, imm32);
-	memory_write_word(address, registers->r[rt]);
+	if (index) {
+		if (!wback) {
+			printf("  STR R%d, [R%d, #%d]\n", t, n, imm32);
+
+		}
+		else {
+			printf("  STR R%d, [R%d, #%d]!\n", t, n, imm32);
+		}
+	}
+	else {
+		printf("  STR R%d, [R%d], #%d\n", t, n, imm32);
+	}
+	memory_write_word(address, registers->r[t]);
+
+	if (wback) {
+		printf("  > R%d = %08X\n", n, offset_addr);
+		registers->r[n] = offset_addr;
+	}
+}
+
+static void a6_7_119_t1(struct registers *registers,
+                        uint16_t halfword)
+{
+	uint8_t imm5 = (halfword & 0x07C0) >> 6;
+	uint8_t n = (halfword & 0x0038) >> 3;
+	uint8_t t = (halfword & 0x0007);
+
+	uint32_t imm32 = imm5 << 2;
+	bool index = true;
+	bool add = true;
+	bool wback = false;
+
+	STR_immediate(registers, t, n, imm32, index, add, wback);
+}
+
+static void a6_7_119_t4(struct registers *registers,
+                        uint16_t first_halfword,
+                        uint16_t second_halfword)
+{
+	uint8_t n = (first_halfword & 0x000F) >> 0;
+	uint8_t t = (second_halfword & 0xF000) >> 12;
+	uint8_t P = (second_halfword & 0x0400) >> 10;
+	uint8_t U = (second_halfword & 0x0200) >> 9;
+	uint8_t W = (second_halfword & 0x0100) >> 8;
+	uint8_t imm8 = (second_halfword & 0x00FF) >> 0;
+
+	uint32_t imm32 = imm8;
+	bool index = P == 1;
+	bool add = U == 1;
+	bool wback = W == 1;
+
+	STR_immediate(registers, t, n, imm32, index, add, wback);
 }
 
 static void STRB(struct registers *registers,
@@ -950,10 +1034,15 @@ static void a5_3_10(struct registers *registers,
 	uint8_t op2 = (second_halfword & 0x0FC0) >> 6;
 
 	if (op1 == 0b100) {
-
 	}
 	else if ((op1 == 0b000) && ((op2 & 0b100000) == 0b100000)) {
 		a6_7_121_t3(registers, first_halfword, second_halfword);
+	}
+	else if ((op1 == 0b010) && ((op2 & 0b100000) == 0b100000)) {
+		a6_7_119_t4(registers, first_halfword, second_halfword);
+	}
+	else if ((op1 == 0b010) && ((op2 & 0b100000) == 0b000000)) {
+		printf("STR a5_3_10\n");
 	}
 }
 
@@ -969,7 +1058,6 @@ static void a5_3(struct registers *registers,
 	uint8_t op = (second_halfword & 0x8000) >> 15;
 
 	if (op1 == 0b01) {
-
 	}
 	else if (op1 == 0b10) {
 		if (((op2 & 0b0100000) == 0b0000000)
@@ -985,8 +1073,17 @@ static void a5_3(struct registers *registers,
 		}
 	}
 	else if (op1 == 0b11) {
-		if ((op2 & 0b1100100) == 0b0000000) {
+		if ((op2 & 0b1110001) == 0b0000000) {
 			a5_3_10(registers, first_halfword, second_halfword);
+		}
+		else if ((op2 & 0b1100111) == 0b0000001) {
+			printf("Load bytes, memory hints\n");
+		}
+		else if ((op2 & 0b1100111) == 0b0000011) {
+			printf("Load halfword, unallocated memory hints\n");
+		}
+		else if ((op2 & 0b1100111) == 0b0000101) {
+			printf("Load word\n");
 		}
 	}
 }
