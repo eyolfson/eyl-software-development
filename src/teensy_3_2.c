@@ -83,8 +83,71 @@ static const char *get_address_name(uint32_t address)
 	}
 
 	switch (address) {
+	case 0x40038000:
+		name = "FTM0_SC";
+		break;
 	case 0x40038004:
 		name = "FTM0_CNT";
+		break;
+	case 0x40038008:
+		name = "FTM0_MOD";
+		break;
+	case 0x4003800C:
+		name = "FTM0_C0SC";
+		break;
+	case 0x40038010:
+		name = "FTM0_C0V";
+		break;
+	case 0x40038014:
+		name = "FTM0_C1SC";
+		break;
+	case 0x40038018:
+		name = "FTM0_C1V";
+		break;
+	case 0x4003801C:
+		name = "FTM0_C2SC";
+		break;
+	case 0x40038020:
+		name = "FTM0_C2V";
+		break;
+	case 0x40038024:
+		name = "FTM0_C3SC";
+		break;
+	case 0x40038028:
+		name = "FTM0_C3V";
+		break;
+	case 0x4003802C:
+		name = "FTM0_C4SC";
+		break;
+	case 0x40038030:
+		name = "FTM0_C4V";
+		break;
+	case 0x40038034:
+		name = "FTM0_C5SC";
+		break;
+	case 0x40038038:
+		name = "FTM0_C5V";
+		break;
+	case 0x4003803C:
+		name = "FTM0_C6SC";
+		break;
+	case 0x40038040:
+		name = "FTM0_C6V";
+		break;
+	case 0x40038044:
+		name = "FTM0_C7SC";
+		break;
+	case 0x40038048:
+		name = "FTM0_C7V";
+		break;
+	case 0x4003804C:
+		name = "FTM0_CTNIN";
+		break;
+	case 0x40038050:
+		name = "FTM0_STATUS";
+		break;
+	case 0x40038054:
+		name = "FTM0_MODE";
 		break;
 	case 0x4003D010:
 		name = "RTC_CR";
@@ -1262,7 +1325,7 @@ void teensy_3_2_emulate(uint8_t *data, uint32_t length) {
 	}
 
 	printf("\nExecution:\n");
-	for (int i = 0; i < 141; ++i){
+	for (int i = 0; i < 160; ++i){
 		step(&registers);
 	}
 }
