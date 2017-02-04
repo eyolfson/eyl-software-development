@@ -6,7 +6,11 @@
 
 struct registers {
 	uint32_t r[16];
+	uint32_t apsr;
+	uint32_t ipsr;
 	uint32_t epsr;
+	uint32_t primask;
+	uint32_t faultmask;
 };
 
 struct ThumbExpandImm_C_Result {
@@ -74,7 +78,14 @@ static const char *get_address_name(uint32_t address)
 {
 	const char *name = NULL;
 
+	if (address >= 0xE0000000 && address <= 0xE00FFFFF) {
+		name = "PPB (Private Peripheral Bus)";
+	}
+
 	switch (address) {
+	case 0x40038004:
+		name = "FTM0_CNT";
+		break;
 	case 0x4003D010:
 		name = "RTC_CR";
 		break;
@@ -167,6 +178,24 @@ static const char *get_address_name(uint32_t address)
 		break;
 	case 0x4007D002:
 		name = "PMC_REGSC";
+		break;
+	case 0xE000E010:
+		name = "SYST_CSR";
+		break;
+	case 0xE000E014:
+		name = "SYST_RVR";
+		break;
+	case 0xE000E100:
+		name = "SETENA0";
+		break;
+	case 0xE000E104:
+		name = "SETENA1";
+		break;
+	case 0xE000E108:
+		name = "SETENA2";
+		break;
+	case 0xE004E004:
+		name = "ICTR";
 		break;
 	}
 
@@ -288,6 +317,50 @@ static uint16_t halfword_at_address(uint32_t base)
 }
 
 static void set_bit(uint32_t *v, uint8_t i) { *v |= (1 << i); }
+
+static void b4_1_1_t1(struct registers *registers, uint16_t halfword)
+{
+	uint8_t im = (halfword & 0x0010) >> 4;
+	uint8_t I = (halfword & 0x0002) >> 1;
+	uint8_t F = (halfword & 0x0001) >> 0;
+
+	bool enable = im == 0;
+	bool disable = im == 1;
+	bool affectPRI = I == 1;
+	bool affectFAULT = F == 1;
+
+	printf("  CPS");
+	if (enable) {
+		printf("IE");
+		if (affectPRI) {
+			printf(" i");
+			registers->primask = 0;
+		}
+		if (affectFAULT) {
+			if (!affectPRI) {
+				printf(" ");
+			}
+			printf("f");
+			registers->faultmask = 0;
+		}
+	}
+	else if (disable) {
+		printf("ID");
+		if (affectPRI) {
+			printf(" i");
+			registers->primask = 1;
+		}
+		// TODO Priority
+		if (affectFAULT) {
+			if (!affectPRI) {
+				printf(" ");
+			}
+			printf("f");
+			registers->faultmask = 1;
+		}
+	}
+	printf("\n");
+}
 
 static void a6_7_4_t1(struct registers *registers, uint16_t halfword)
 {
@@ -898,23 +971,73 @@ static void a5_2_4(struct registers *registers,
 static void a5_2_5(struct registers *registers, uint16_t halfword)
 {
 	uint8_t opcode = (halfword & 0x0FE0) >> 5;
-	if ((opcode & 0x70) == 0x20) {
-		a6_7_98_t1(registers, halfword);
+	if (opcode == 0b0110011) {
+		b4_1_1_t1(registers, halfword); // CPS
 	}
-	else if ((opcode & 0x70) == 0x60) {
-		/* POP */
+	else if ((opcode & 0b1111100) == 0b0000000) {
+		printf("  ADD? a5_2_5\n");
+		assert(false);
 	}
-	else if ((opcode & 0b1111110) == 0b0010110) {
-		a6_7_149_t1(registers, halfword);
+	else if ((opcode & 0b1111100) == 0b0000100) {
+		printf("  SUB? a5_2_5\n");
+		assert(false);
 	}
 	else if ((opcode & 0b1111000) == 0b0001000) {
-		a6_7_21_t1(registers, halfword);
+		a6_7_21_t1(registers, halfword); // CBNZ, CBZ
 	}
-	else if ((opcode & 0x78) == 0x78) {
+	else if ((opcode & 0b1111110) == 0b0010000) {
+		printf("  SXTH? a5_2_5\n");
+		assert(false);
+	}
+	else if ((opcode & 0b1111110) == 0b0010010) {
+		printf("  SXTB? a5_2_5\n");
+		assert(false);
+	}
+	else if ((opcode & 0b1111110) == 0b0010100) {
+		printf("  UXTH? a5_2_5\n");
+		assert(false);
+	}
+	else if ((opcode & 0b1111110) == 0b0010110) {
+		a6_7_149_t1(registers, halfword); // UXTB
+	}
+	else if ((opcode & 0b1111000) == 0b0011000) {
+		a6_7_21_t1(registers, halfword); // CBNZ, CBZ
+	}
+	else if ((opcode & 0b1110000) == 0b0100000) {
+		a6_7_98_t1(registers, halfword); // PUSH
+	}
+	else if ((opcode & 0b1111000) == 0b1001000) {
+		a6_7_21_t1(registers, halfword); // CBNZ, CBZ
+	}
+	else if ((opcode & 0b1111110) == 0b1010000) {
+		printf("  REV? a5_2_5\n");
+		assert(false);
+	}
+	else if ((opcode & 0b1111110) == 0b1010010) {
+		printf("  REV16? a5_2_5\n");
+		assert(false);
+	}
+	else if ((opcode & 0b1111110) == 0b1010110) {
+		printf("  REVSH? a5_2_5\n");
+		assert(false);
+	}
+	else if ((opcode & 0b1111000) == 0b1011000) {
+		a6_7_21_t1(registers, halfword); // CBNZ, CBZ
+	}
+	else if ((opcode & 0b1110000) == 0b1100000) {
+		printf("  POP? a5_2_5\n");
+		assert(false);
+	}
+	else if ((opcode & 0b1111000) == 0b1110000) {
+		printf("  BKPT? a5_2_5\n");
+		assert(false);
+	}
+	else if ((opcode & 0b1111000) == 0b1111000) {
 		uint8_t opA = (halfword & 0x00F0) >> 4;
 		uint8_t opB = (halfword & 0x000F);
-		if (opA == 0 && opB == 0) {
-			a6_7_87_t1(registers, halfword);
+
+		if (opA == 0b0000 && opB == 0b0000) {
+			a6_7_87_t1(registers, halfword); // NOP
 		}
 	}
 }
@@ -1139,7 +1262,7 @@ void teensy_3_2_emulate(uint8_t *data, uint32_t length) {
 	}
 
 	printf("\nExecution:\n");
-	for (int i = 0; i < 114; ++i){
+	for (int i = 0; i < 141; ++i){
 		step(&registers);
 	}
 }
