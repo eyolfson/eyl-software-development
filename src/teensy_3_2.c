@@ -215,6 +215,18 @@ static const char *get_address_name(uint32_t address)
 	case 0x40039054:
 		name = "FTM1_MODE";
 		break;
+	case 0x4003B000:
+		name = "ADC0_SC1A";
+		break;
+	case 0x4003B004:
+		name = "ADC0_SC1B";
+		break;
+	case 0x4003B008:
+		name = "ADC0_CFG1";
+		break;
+	case 0x4003B00C:
+		name = "ADC0_CFG2";
+		break;
 	case 0x4003D010:
 		name = "RTC_CR";
 		break;
@@ -374,6 +386,30 @@ static const char *get_address_name(uint32_t address)
 	case 0x400B8054:
 		name = "FTM2_MODE";
 		break;
+	case 0x400BB000:
+		name = "ADC1_SC1A";
+		break;
+	case 0x400BB004:
+		name = "ADC1_SC1B";
+		break;
+	case 0x400BB008:
+		name = "ADC1_CFG1";
+		break;
+	case 0x400BB00C:
+		name = "ADC1_CFG2";
+		break;
+	case 0x400BB010:
+		name = "ADC1_RA";
+		break;
+	case 0x400BB014:
+		name = "ADC1_RB";
+		break;
+	case 0x400BB018:
+		name = "ADC1_CV1";
+		break;
+	case 0x400BB01C:
+		name = "ADC1_CV2";
+		break;
 	case 0xE000E010:
 		name = "SYST_CSR";
 		break;
@@ -476,7 +512,9 @@ static uint32_t word_at_address(uint32_t base)
 static uint8_t memory_read_byte(uint32_t address)
 {
 	if (address < 0x20008000) {
-		return flash[address];
+		uint8_t value = flash[address];
+		printf("  > MemU[%08X, 1] = %02X\n", address, value);
+		return value;
 	}
 	else {
 		const char *name = get_address_name(address);
@@ -492,7 +530,9 @@ static uint8_t memory_read_byte(uint32_t address)
 static uint32_t memory_read_word(uint32_t address)
 {
 	if (address < 0x20008000) {
-		return word_at_address(address);
+		uint32_t value = word_at_address(address);
+		printf("  > UMem[%08X, 4] = %08X\n", address, value);
+		return value;
 	}
 	else {
 		const char *name = get_address_name(address);
@@ -748,9 +788,10 @@ static void a6_7_43_t1(struct registers *registers, uint16_t halfword)
 
 	uint32_t base = Align_PC_4(registers);
 	uint32_t address = base + imm32;
-	registers->r[t] = word_at_address(address);
 
 	printf("  LDR R%d [PC, #%d]\n", t, imm32);
+	uint32_t data = memory_read_word(address);
+	registers->r[t] = data;
 	printf("  > R%d = %08X\n", t, registers->r[t]);
 }
 
@@ -1457,7 +1498,7 @@ void teensy_3_2_emulate(uint8_t *data, uint32_t length) {
 	}
 
 	printf("\nExecution:\n");
-	for (int i = 0; i < 170; ++i){
+	for (int i = 0; i < 190; ++i){
 		step(&registers);
 	}
 }
