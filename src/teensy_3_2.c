@@ -11,6 +11,7 @@ struct registers {
 	uint32_t epsr;
 	uint32_t primask;
 	uint32_t faultmask;
+	uint8_t itstate;
 };
 
 struct ThumbExpandImm_C_Result {
@@ -26,6 +27,76 @@ enum SRType {
 	SRType_ROR,
 	SRType_RRX,
 };
+
+uint8_t CurrentCond(struct registers *registers)
+{
+	return (registers->itstate & 0xF0) >> 4;
+}
+
+uint8_t APSR_N(struct registers *registers)
+{
+	return (registers->apsr & 0x80000000) >> 31;
+}
+
+uint8_t APSR_Z(struct registers *registers)
+{
+	return (registers->apsr & 0x40000000) >> 30;
+}
+
+uint8_t APSR_C(struct registers *registers)
+{
+	return (registers->apsr & 0x20000000) >> 29;
+}
+
+uint8_t APSR_V(struct registers *registers)
+{
+	return (registers->apsr & 0x10000000) >> 28;
+}
+
+uint8_t APSR_Q(struct registers *registers)
+{
+	return (registers->apsr & 0x08000000) >> 27;
+}
+
+bool ConditionPassed(struct registers *registers)
+{
+	uint8_t cond = CurrentCond(registers);
+
+	bool result;
+	switch (cond & 0b1110) {
+	case 0b0000:
+		result = APSR_Z(registers) == 1;
+		break;
+	case 0b0010:
+		result = APSR_C(registers) == 1;
+		break;
+	case 0b0100:
+		result = APSR_N(registers) == 1;
+		break;
+	case 0b0110:
+		result = APSR_V(registers) == 1;
+		break;
+	case 0b1000:
+		result = (APSR_C(registers) == 1) && (APSR_Z(registers) == 0);
+		break;
+	case 0b1010:
+		result = APSR_N(registers) == APSR_V(registers);
+		break;
+	case 0b1100:
+		result = (APSR_N(registers) == APSR_V(registers))
+		         && (APSR_Z(registers) == 0);
+		break;
+	case 0b1110:
+		result = true;
+		break;
+	}
+
+	if (((cond & 0b0001) == 0b0001) && (cond != 0b1111)) {
+		result = !result;
+	}
+
+	return result;
+}
 
 /* A4.2.2 */
 uint32_t PC(struct registers *registers)
@@ -227,6 +298,27 @@ static const char *get_address_name(uint32_t address)
 	case 0x4003B00C:
 		name = "ADC0_CFG2";
 		break;
+	case 0x4003B010:
+		name = "ADC0_RA";
+		break;
+	case 0x4003B014:
+		name = "ADC0_RB";
+		break;
+	case 0x4003B018:
+		name = "ADC0_CV1";
+		break;
+	case 0x4003B01C:
+		name = "ADC0_CV2";
+		break;
+	case 0x4003B020:
+		name = "ADC0_SC2";
+		break;
+	case 0x4003B024:
+		name = "ADC0_SC3";
+		break;
+	case 0x4003B028:
+		name = "ADC0_OFS";
+		break;
 	case 0x4003D010:
 		name = "RTC_CR";
 		break;
@@ -410,23 +502,50 @@ static const char *get_address_name(uint32_t address)
 	case 0x400BB01C:
 		name = "ADC1_CV2";
 		break;
+	case 0x400BB020:
+		name = "ADC1_SC2";
+		break;
+	case 0x400BB024:
+		name = "ADC1_SC3";
+		break;
+	case 0x400BB028:
+		name = "ADC1_OFS";
+		break;
+	case 0x400BB02C:
+		name = "ADC1_PG";
+		break;
+	case 0x400BB030:
+		name = "ADC1_MG";
+		break;
 	case 0xE000E010:
 		name = "SYST_CSR";
 		break;
 	case 0xE000E014:
 		name = "SYST_RVR";
 		break;
+	case 0xE000E018:
+		name = "SYST_CVR";
+		break;
 	case 0xE000E100:
-		name = "SETENA0";
+		name = "NVIC_ISER0";
 		break;
 	case 0xE000E104:
-		name = "SETENA1";
+		name = "NVIC_ISER1";
 		break;
 	case 0xE000E108:
-		name = "SETENA2";
+		name = "NVIC_ISER2";
 		break;
 	case 0xE004E004:
 		name = "ICTR";
+		break;
+	case 0xE000ED00:
+		name = "CPUID";
+		break;
+	case 0xE000ED04:
+		name = "ICSR";
+		break;
+	case 0xE000ED08:
+		name = "VTOR";
 		break;
 	}
 
@@ -762,6 +881,68 @@ static void a6_7_28_t1(struct registers *registers, uint16_t halfword)
 	printf("  CMP R%d, R%d\n", n, m);
 }
 
+static void a6_7_37_t1(struct registers *registers, uint16_t halfword)
+{
+	uint8_t firstcond = (halfword & 0x00F0) >> 4;
+	uint8_t mask = (halfword & 0x000F) >> 0;
+
+	printf("  IT");
+	switch (firstcond) {
+	case 0b0000:
+		printf(" EQ");
+		break;
+	case 0b0001:
+		printf(" NE");
+		break;
+	case 0b0010:
+		printf(" CS");
+		break;
+	case 0b0011:
+		printf(" CC");
+		break;
+	case 0b0100:
+		printf(" MI");
+		break;
+	case 0b0101:
+		printf(" PL");
+		break;
+	case 0b0110:
+		printf(" VS");
+		break;
+	case 0b0111:
+		printf(" VC");
+		break;
+	case 0b1000:
+		printf(" HI");
+		break;
+	case 0b1001:
+		printf(" LS");
+		break;
+	case 0b1010:
+		printf(" GE");
+		break;
+	case 0b1011:
+		printf(" LT");
+		break;
+	case 0b1100:
+		printf(" GT");
+		break;
+	case 0b1101:
+		printf(" LE");
+		break;
+	case 0b1110:
+		break;
+	case 0b1111:
+		break;
+	}
+	printf("\n");
+
+	assert(mask == 0b1000);
+
+	registers->itstate = (halfword & 0x00FF) >> 0;
+	printf("  > ITSTATE = %02X\n", registers->itstate);
+}
+
 static void a6_7_42_t1(struct registers *registers,
                         uint16_t first_halfword)
 {
@@ -811,6 +992,21 @@ static void a6_7_45_t1(struct registers *registers,
 	registers->r[rt] = value;
 	printf("  > R%d = %08X\n", rt, value);
 }
+
+static void a6_7_67_t1(struct registers *registers,
+                       uint16_t halfword)
+{
+	uint8_t imm5 = (halfword & 0x07C0) >> 6;
+	uint8_t m = (halfword & 0x0038) >> 3;
+	uint8_t d = (halfword & 0x0007) >> 0;
+
+	assert(imm5 != 0b00000);
+	printf("  LSL R%d, R%d, #%d\n", d, m, imm5);
+	// TODO
+	registers->r[d] = registers->r[m] << imm5;
+	printf("  R%d = %08X\n", d, registers->r[d]);
+}
+
 static void a6_7_75_t1(struct registers *registers,
                        uint16_t halfword)
 {
@@ -1073,7 +1269,7 @@ static void a5_2_1(struct registers *registers,
 	uint8_t opcode = (halfword & 0x3E00) >> 9;
 
 	if ((opcode & 0b11100) == 0b00000) {
-		printf("  LSL?\n");
+		a6_7_67_t1(registers, halfword); // LSL
 	}
 	else if ((opcode & 0b11100) == 0b00100) {
 		printf("  LSR?\n");
@@ -1272,8 +1468,27 @@ static void a5_2_5(struct registers *registers, uint16_t halfword)
 		uint8_t opA = (halfword & 0x00F0) >> 4;
 		uint8_t opB = (halfword & 0x000F);
 
-		if (opA == 0b0000 && opB == 0b0000) {
+		if (opB != 0b0000) {
+			a6_7_37_t1(registers, halfword); // IT
+		}
+		else if (opA == 0b0000) {
 			a6_7_87_t1(registers, halfword); // NOP
+		}
+		else if (opA == 0b0001) {
+			printf("  YIELD a5_2_5\n");
+			assert(false);
+		}
+		else if (opA == 0b0010) {
+			printf("  WFE a5_2_5\n");
+			assert(false);
+		}
+		else if (opA == 0b0011) {
+			printf("  WFI a5_2_5\n");
+			assert(false);
+		}
+		else if (opA == 0b0100) {
+			printf("  SEV a5_2_5\n");
+			assert(false);
 		}
 	}
 }
@@ -1498,7 +1713,7 @@ void teensy_3_2_emulate(uint8_t *data, uint32_t length) {
 	}
 
 	printf("\nExecution:\n");
-	for (int i = 0; i < 190; ++i){
+	for (int i = 0; i < 228; ++i){
 		step(&registers);
 	}
 }
