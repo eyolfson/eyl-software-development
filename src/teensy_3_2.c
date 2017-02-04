@@ -149,6 +149,72 @@ static const char *get_address_name(uint32_t address)
 	case 0x40038054:
 		name = "FTM0_MODE";
 		break;
+	case 0x40039000:
+		name = "FTM1_SC";
+		break;
+	case 0x40039004:
+		name = "FTM1_CNT";
+		break;
+	case 0x40039008:
+		name = "FTM1_MOD";
+		break;
+	case 0x4003900C:
+		name = "FTM1_C0SC";
+		break;
+	case 0x40039010:
+		name = "FTM1_C0V";
+		break;
+	case 0x40039014:
+		name = "FTM1_C1SC";
+		break;
+	case 0x40039018:
+		name = "FTM1_C1V";
+		break;
+	case 0x4003901C:
+		name = "FTM1_C2SC";
+		break;
+	case 0x40039020:
+		name = "FTM1_C2V";
+		break;
+	case 0x40039024:
+		name = "FTM1_C3SC";
+		break;
+	case 0x40039028:
+		name = "FTM1_C3V";
+		break;
+	case 0x4003902C:
+		name = "FTM1_C4SC";
+		break;
+	case 0x40039030:
+		name = "FTM1_C4V";
+		break;
+	case 0x40039034:
+		name = "FTM1_C5SC";
+		break;
+	case 0x40039038:
+		name = "FTM1_C5V";
+		break;
+	case 0x4003903C:
+		name = "FTM1_C6SC";
+		break;
+	case 0x40039040:
+		name = "FTM1_C6V";
+		break;
+	case 0x40039044:
+		name = "FTM1_C7SC";
+		break;
+	case 0x40039048:
+		name = "FTM1_C7V";
+		break;
+	case 0x4003904C:
+		name = "FTM1_CTNIN";
+		break;
+	case 0x40039050:
+		name = "FTM1_STATUS";
+		break;
+	case 0x40039054:
+		name = "FTM1_MODE";
+		break;
 	case 0x4003D010:
 		name = "RTC_CR";
 		break;
@@ -241,6 +307,72 @@ static const char *get_address_name(uint32_t address)
 		break;
 	case 0x4007D002:
 		name = "PMC_REGSC";
+		break;
+	case 0x400B8000:
+		name = "FTM2_SC";
+		break;
+	case 0x400B8004:
+		name = "FTM2_CNT";
+		break;
+	case 0x400B8008:
+		name = "FTM2_MOD";
+		break;
+	case 0x400B800C:
+		name = "FTM2_C0SC";
+		break;
+	case 0x400B8010:
+		name = "FTM2_C0V";
+		break;
+	case 0x400B8014:
+		name = "FTM2_C1SC";
+		break;
+	case 0x400B8018:
+		name = "FTM2_C1V";
+		break;
+	case 0x400B801C:
+		name = "FTM2_C2SC";
+		break;
+	case 0x400B8020:
+		name = "FTM2_C2V";
+		break;
+	case 0x400B8024:
+		name = "FTM2_C3SC";
+		break;
+	case 0x400B8028:
+		name = "FTM2_C3V";
+		break;
+	case 0x400B802C:
+		name = "FTM2_C4SC";
+		break;
+	case 0x400B8030:
+		name = "FTM2_C4V";
+		break;
+	case 0x400B8034:
+		name = "FTM2_C5SC";
+		break;
+	case 0x400B8038:
+		name = "FTM2_C5V";
+		break;
+	case 0x400B803C:
+		name = "FTM2_C6SC";
+		break;
+	case 0x400B8040:
+		name = "FTM2_C6V";
+		break;
+	case 0x400B8044:
+		name = "FTM2_C7SC";
+		break;
+	case 0x400B8048:
+		name = "FTM2_C7V";
+		break;
+	case 0x400B804C:
+		name = "FTM2_CTNIN";
+		break;
+	case 0x400B8050:
+		name = "FTM2_STATUS";
+		break;
+	case 0x400B8054:
+		name = "FTM2_MODE";
 		break;
 	case 0xE000E010:
 		name = "SYST_CSR";
@@ -1325,7 +1457,7 @@ void teensy_3_2_emulate(uint8_t *data, uint32_t length) {
 	}
 
 	printf("\nExecution:\n");
-	for (int i = 0; i < 160; ++i){
+	for (int i = 0; i < 170; ++i){
 		step(&registers);
 	}
 }
