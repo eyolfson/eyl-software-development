@@ -4,6 +4,13 @@
 #include <stdbool.h>
 #include <stdio.h>
 
+/* SRAM_L = [0x1FFF8000, 0x20000000)
+ * SRAM_U = [0x20000000, 0x20007FFF)
+ */
+
+#define SRAM_LOWER 0x1FFF8000
+#define SRAM_UPPER 0x20007FFF
+
 struct registers {
 	uint32_t r[16];
 	uint32_t apsr;
@@ -96,6 +103,29 @@ bool ConditionPassed(struct registers *registers)
 	}
 
 	return result;
+}
+
+void ITAdvance(struct registers *registers)
+{
+	if ((registers->itstate & 0b00000111) == 0b00000000) {
+		registers->itstate = 0;
+	}
+	else {
+		uint8_t old_state = registers->itstate & 0b00011111;
+		uint8_t new_state = (old_state << 1) & 0b00011111;
+		registers->itstate = (registers->itstate & 0b11100000)
+		                     | new_state;
+	}
+}
+
+bool InITBlock(struct registers *registers)
+{
+	return (registers->itstate & 0b00001111) != 0b0000;
+}
+
+bool LastInITBlock(struct registers *registers)
+{
+	return (registers->itstate & 0b00001111) == 0b1000;
 }
 
 /* A4.2.2 */
@@ -630,10 +660,14 @@ static uint32_t word_at_address(uint32_t base)
 
 static uint8_t memory_read_byte(uint32_t address)
 {
-	if (address < 0x20008000) {
+	if (address < SRAM_LOWER) {
 		uint8_t value = flash[address];
 		printf("  > MemU[%08X, 1] = %02X\n", address, value);
 		return value;
+	}
+	else if (address >= SRAM_LOWER && address <= SRAM_UPPER) {
+		printf("  > MemU[%08X, 1] (SRAM) = %02X\n", address, 0);
+		return 0;
 	}
 	else {
 		const char *name = get_address_name(address);
@@ -648,10 +682,14 @@ static uint8_t memory_read_byte(uint32_t address)
 
 static uint32_t memory_read_word(uint32_t address)
 {
-	if (address < 0x20008000) {
+	if (address < SRAM_LOWER) {
 		uint32_t value = word_at_address(address);
-		printf("  > UMem[%08X, 4] = %08X\n", address, value);
+		printf("  > MemU[%08X, 4] = %08X\n", address, value);
 		return value;
+	}
+	else if (address >= SRAM_LOWER && address <= SRAM_UPPER) {
+		printf("  > MemU[%08X, 4] (SRAM) = %08X\n", address, 0);
+		return 0;
 	}
 	else {
 		const char *name = get_address_name(address);
@@ -714,6 +752,25 @@ static void b4_1_1_t1(struct registers *registers, uint16_t halfword)
 		}
 	}
 	printf("\n");
+}
+
+static void a6_7_3_t2(struct registers *registers, uint16_t halfword)
+{
+	uint8_t d = (halfword & 0x0700) >> 8;
+	uint8_t imm8 = (halfword & 0x00FF) >> 0;
+	uint8_t n = d;
+	bool setflags = !InITBlock(registers);
+
+	uint32_t imm32 = imm8;
+
+	printf("  ADD");
+	if (setflags) {
+		printf("S");
+	}
+	printf(" R%d #%d\n", d, imm32);
+
+	registers->r[d] += imm32;
+	printf("  > R%d = %08X\n", d, registers->r[d]);
 }
 
 static void a6_7_4_t1(struct registers *registers, uint16_t halfword)
@@ -1296,7 +1353,7 @@ static void a5_2_1(struct registers *registers,
 		a6_7_27_t1(registers, halfword);
 	}
 	else if ((opcode & 0b11100) == 0b11000) {
-		printf("  ADD?\n");
+		a6_7_3_t2(registers, halfword); // ADD
 	}
 	else if ((opcode & 0b11100) == 0b11100) {
 		printf("  SUB?\n");
@@ -1685,9 +1742,6 @@ static void step(struct registers *registers)
 	}
 }
 
-/* SRAM_L = [0x1FFF8000, 0x20000000)
- * SRAM_U = [0x20000000, 0x20007FFF)
- */
 void teensy_3_2_emulate(uint8_t *data, uint32_t length) {
 	flash = data;
 
