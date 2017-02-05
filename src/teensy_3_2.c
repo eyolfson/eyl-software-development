@@ -1158,6 +1158,13 @@ static void a6_7_98_t1(struct registers *registers,
 	printf("  > R13 = %08X\n", address);
 }
 
+static void a6_7_106_t2(struct registers *registers,
+                        uint16_t first_halfword,
+                        uint16_t second_halfword)
+{
+	printf("  RSB\n");
+}
+
 static void STR_immediate(struct registers *registers,
                           uint8_t t, uint8_t n, int32_t imm32,
                           bool index, bool add, bool wback)
@@ -1616,22 +1623,69 @@ static void a5_3_1(struct registers *registers,
                    uint16_t second_halfword)
 {
 	uint8_t op = (first_halfword & 0x01F0) >> 4;
-	uint8_t rn = (first_halfword & 0x000F);
+	uint8_t rn = (first_halfword & 0x000F) >> 0;
 	uint8_t rd = (second_halfword & 0x0F00) >> 8;
 
-	if ((op & 0x1E) == 0x00) {
-		if (!(rd == 0xF)) {
-			a6_7_8_t1(registers, first_halfword, second_halfword);
+	if ((op & 0b11110) == 0b00000) {
+		if (!(rd == 0b1111)) {
+			a6_7_8_t1(registers,
+			          first_halfword, second_halfword); // AND
 		}
-		else if (rd == 0xF) {
+		else if (rd == 0b1111) {
+			printf("  TST? a5_3_1\n");
 		}
 	}
-	else if ((op & 0x1E) == 0x04) {
-		if (!(rn == 0xF)) {
+	else if ((op & 0b11110) == 0b00010) {
+		printf("  BIC? a5_3_1\n");
+	}
+	else if ((op & 0b11110) == 0b00100) {
+		if (!(rn == 0b1111)) {
+			printf("  ORR? a5_3_1\n");
 		}
-		else {
+		else if (rn == 0b1111) {
 			a6_7_75_t2(registers, first_halfword, second_halfword);
 		}
+	}
+	else if ((op & 0b11110) == 0b00110) {
+		if (!(rn == 0b1111)) {
+			printf("  ORN? a5_3_1\n");
+		}
+		else if (rn == 0b1111) {
+			printf("  MVN? a5_3_1\n");
+		}
+	}
+	else if ((op & 0b11110) == 0b01000) {
+		if (!(rd == 0b1111)) {
+			printf("  EOR? a5_3_1\n");
+		}
+		else if (rd == 0b1111) {
+			printf("  TEQ? a5_3_1\n");
+		}
+	}
+	else if ((op & 0b11110) == 0b10000) {
+		if (!(rd == 0b1111)) {
+			printf("  ADD? a5_3_1\n");
+		}
+		else if (rd == 0b1111) {
+			printf("  CMN? a5_3_1\n");
+		}
+	}
+	else if ((op & 0b11110) == 0b10100) {
+		printf("  ADC? a5_3_1\n");
+	}
+	else if ((op & 0b11110) == 0b10110) {
+		printf("  SBC? a5_3_1\n");
+	}
+	else if ((op & 0b11110) == 0b11010) {
+		if (!(rd == 0b1111)) {
+			printf("  SUB? a5_3_1\n");
+		}
+		else if (rd == 0b1111) {
+			printf("  CMP? a5_3_1\n");
+		}
+	}
+	else if ((op & 0b11110) == 0b11100) {
+		a6_7_106_t2(registers, first_halfword, second_halfword); // RSB
 	}
 }
 
@@ -1767,7 +1821,7 @@ void teensy_3_2_emulate(uint8_t *data, uint32_t length) {
 	}
 
 	printf("\nExecution:\n");
-	for (int i = 0; i < 228; ++i){
+	for (int i = 0; i < 229; ++i){
 		step(&registers);
 	}
 }
