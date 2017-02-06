@@ -169,7 +169,13 @@ struct ThumbExpandImm_C_Result ThumbExpandImm_C(uint16_t imm12, bool carry) {
 	}
 
 	return result;
-};
+}
+
+uint32_t ThumbExpandImm(struct registers *registers,
+                        uint16_t imm12)
+{
+	return ThumbExpandImm_C(imm12, APSR_C(registers)).imm32;
+}
 
 static uint8_t *flash;
 
@@ -1162,7 +1168,25 @@ static void a6_7_106_t2(struct registers *registers,
                         uint16_t first_halfword,
                         uint16_t second_halfword)
 {
-	printf("  RSB\n");
+	uint8_t i = (first_halfword & 0x0400) >> 10;
+	uint8_t S = (first_halfword & 0x0010) >> 4;
+	uint8_t n = (first_halfword & 0x000F) >> 0;
+	uint8_t imm3 = (second_halfword & 0x7000) >> 12;
+	uint8_t d = (second_halfword & 0x0F00) >> 8;
+	uint8_t imm8 = (second_halfword & 0x00FF) >> 0;
+
+	uint16_t imm12 = (i * 0x800)
+	                 + (imm3 * 0x100)
+	                 + imm8;
+
+	bool setflags = S == 1;
+	uint32_t imm32 = ThumbExpandImm(registers, imm12);
+
+	printf("  RSB");
+	if (setflags) {
+		printf("S");
+	}
+	printf(" R%d, R%d, #0x%08X\n", d, n, imm32);
 }
 
 static void STR_immediate(struct registers *registers,
