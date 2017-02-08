@@ -26,6 +26,12 @@ struct ThumbExpandImm_C_Result {
 	bool carry;
 };
 
+struct AddWithCarry_Result {
+	uint32_t result;
+	bool carry_out;
+	bool overflow;
+};
+
 enum SRType {
 	SRType_None,
 	SRType_LSL,
@@ -63,6 +69,32 @@ uint8_t APSR_V(struct registers *registers)
 uint8_t APSR_Q(struct registers *registers)
 {
 	return (registers->apsr & 0x08000000) >> 27;
+}
+
+struct AddWithCarry_Result AddWithCarry(uint32_t x, uint32_t y, bool carry_in)
+{
+	struct AddWithCarry_Result R;
+
+
+	uint64_t unsigned_sum = ((uint64_t) x) + ((uint64_t) y);
+	if (carry_in) unsigned_sum += 1;
+
+	int64_t signed_sum = ((int32_t) x) + ((int32_t) y);
+	if (carry_in) signed_sum += 1;
+
+	R.result = (unsigned_sum & 0xFFFFFFFF);
+
+	if (((uint64_t) R.result) == unsigned_sum)
+		R.carry_out = false;
+	else
+		R.carry_out = true;
+
+	if (((int64_t) ((int32_t) R.result)) == signed_sum)
+		R.overflow = false;
+	else
+		R.overflow = true;
+
+	return R;
 }
 
 bool ConditionPassed(struct registers *registers)
@@ -1182,11 +1214,17 @@ static void a6_7_106_t2(struct registers *registers,
 	bool setflags = S == 1;
 	uint32_t imm32 = ThumbExpandImm(registers, imm12);
 
+	struct AddWithCarry_Result R =
+		AddWithCarry(~(registers->r[n]), imm32, true);
+
 	printf("  RSB");
 	if (setflags) {
 		printf("S");
 	}
 	printf(" R%d, R%d, #0x%08X\n", d, n, imm32);
+
+	registers->r[d] = R.result;
+	printf("  > R%d = %08X\n", d, registers->r[d]);
 }
 
 static void STR_immediate(struct registers *registers,
