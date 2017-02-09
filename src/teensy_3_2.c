@@ -801,13 +801,16 @@ static void a6_7_3_t2(struct registers *registers, uint16_t halfword)
 
 	uint32_t imm32 = imm8;
 
+	struct AddWithCarry_Result R =
+		AddWithCarry(registers->r[n], imm32, false);
+
 	printf("  ADD");
 	if (setflags) {
 		printf("S");
 	}
 	printf(" R%d #%d\n", d, imm32);
 
-	registers->r[d] += imm32;
+	registers->r[d] = R.result;
 	printf("  > R%d = %08X\n", d, registers->r[d]);
 }
 
@@ -1039,7 +1042,7 @@ static void a6_7_37_t1(struct registers *registers, uint16_t halfword)
 }
 
 static void a6_7_42_t1(struct registers *registers,
-                        uint16_t first_halfword)
+                       uint16_t first_halfword)
 {
 	uint8_t imm5 = (first_halfword & 0x07C0) >> 6;
 	uint8_t rn = (first_halfword & 0x0038) >> 3;
@@ -1111,6 +1114,13 @@ static void a6_7_75_t1(struct registers *registers,
 	registers->r[rd] = 0x00000000 + imm8;
 	printf("  > R%d = %08X\n", rd, imm8);
 	/* TODO: Set flags */
+}
+
+static void a6_7_73_t1(struct registers *registers,
+                       uint16_t first_halfword,
+                       uint16_t second_halfword)
+{
+	printf("  MLA\n");
 }
 
 static void a6_7_75_t2(struct registers *registers,
@@ -1374,6 +1384,21 @@ static void a6_7_128_t1(struct registers *registers,
 	printf("  STRH R%d [R%d, #%d]\n", rt, rn, imm32);
 
 	memory_write_halfword(address, value);
+}
+
+static void a6_7_145_t1(struct registers *registers,
+                        uint16_t first_halfword,
+                        uint16_t second_halfword)
+{
+	uint8_t n = (first_halfword & 0x000F) >> 0;
+	uint8_t d = (second_halfword & 0x0F00) >> 8;
+	uint8_t m = (second_halfword & 0x000F) >> 0;
+
+	assert(registers->r[m] != 0);
+
+	printf("  UDIV R%d, R%d, R%d\n", d, n, m);
+	registers->r[d] = registers->r[n] / registers->r[m];
+	printf("  > R%d = %08X\n", d, registers->r[d]);
 }
 
 static void a6_7_149_t1(struct registers *registers,
@@ -1793,6 +1818,69 @@ static void a5_3_10(struct registers *registers,
 	}
 }
 
+static void a5_3_14(struct registers *registers,
+                    uint16_t first_halfword,
+                    uint16_t second_halfword)
+{
+	uint8_t op1 = (first_halfword & 0x0070) >> 4;
+	uint8_t a = (second_halfword & 0xF000) >> 12;
+	uint8_t op2 = (second_halfword & 0x0030) >> 4;
+
+	assert(op1 == 0b000);
+
+	if (op2 == 0b00) {
+		if (a != 0b1111) {
+			a6_7_73_t1(registers, first_halfword, second_halfword);
+		}
+		else if (a == 0b1111) {
+			printf("  MUL a5_3_14\n");
+		}
+	}
+	else if (op2 == 0b01) {
+		printf("  MLS a5_3_14\n");
+	}
+	else {
+		assert(false);
+	}
+}
+
+static void a5_3_15(struct registers *registers,
+                    uint16_t first_halfword,
+                    uint16_t second_halfword)
+{
+	uint8_t op1 = (first_halfword & 0x0070) >> 4;
+	uint8_t op2 = (second_halfword & 0x00F0) >> 4;
+
+	switch (op1) {
+	case 0b000:
+		assert(op2 == 0b0000);
+		printf("  SMULL a5_3_15\n");
+		break;
+	case 0b001:
+		assert(op2 == 0b1111);
+		printf("  SDIV a5_3_15\n");
+		break;
+	case 0b010:
+		assert(op2 == 0b0000);
+		printf("  UMULL a5_3_15\n");
+		break;
+	case 0b011:
+		assert(op2 == 0b1111);
+		a6_7_145_t1(registers, first_halfword, second_halfword);
+		break;
+	case 0b100:
+		assert(op2 == 0b0000);
+		printf("  SMLAL a5_3_15\n");
+		break;
+	case 0b110:
+		assert(op2 == 0b0000);
+		printf("  UMLAL a5_3_15\n");
+		break;
+	default:
+		assert(false);
+	}
+}
+
 /* 32-bit instruction encoding */
 static void a5_3(struct registers *registers,
                  uint16_t first_halfword,
@@ -1831,6 +1919,18 @@ static void a5_3(struct registers *registers,
 		}
 		else if ((op2 & 0b1100111) == 0b0000101) {
 			printf("Load word\n");
+		}
+		else if ((op2 & 0b1110000) == 0b0100000) {
+			printf("Data processing\n");
+		}
+		else if ((op2 & 0b1111000) == 0b0110000) {
+			a5_3_14(registers, first_halfword, second_halfword);
+		}
+		else if ((op2 & 0b1111000) == 0b0111000) {
+			a5_3_15(registers, first_halfword, second_halfword);
+		}
+		else if ((op2 & 0b1000000) == 0b1000000) {
+			printf("Coprocessor\n");
 		}
 	}
 }
@@ -1883,7 +1983,7 @@ void teensy_3_2_emulate(uint8_t *data, uint32_t length) {
 	}
 
 	printf("\nExecution:\n");
-	for (int i = 0; i < 229; ++i){
+	for (int i = 0; i < 234; ++i){
 		step(&registers);
 	}
 }
