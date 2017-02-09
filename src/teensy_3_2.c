@@ -923,9 +923,9 @@ static void a6_7_18_t1(struct registers *registers,
 static void a6_7_20_t1(struct registers *registers,
                        uint16_t first_halfword)
 {
-	uint8_t rm = (first_halfword & 0x0078) >> 3;
-	printf("  BX R%d\n", rm);
-	uint32_t address = registers->r[rm] & ~(0x00000001);
+	uint8_t m = (first_halfword & 0x0078) >> 3;
+	printf("  BX R%d\n", m);
+	uint32_t address = registers->r[m] & ~(0x00000001);
 	registers->r[15] = address;
 	printf("  > R15 = %08X\n", address);
 
@@ -1105,6 +1105,22 @@ static void a6_7_67_t1(struct registers *registers,
 	printf("  R%d = %08X\n", d, registers->r[d]);
 }
 
+static void a6_7_73_t1(struct registers *registers,
+                       uint16_t first_halfword,
+                       uint16_t second_halfword)
+{
+	uint8_t n = (first_halfword & 0x000F) >> 0;
+	uint8_t a = (second_halfword & 0xF000) >> 12;
+	uint8_t d = (second_halfword & 0x0F00) >> 8;
+	uint8_t m = (second_halfword & 0x000F) >> 0;
+
+	uint64_t result = registers->r[n] * registers->r[m] + registers->r[a];
+
+	printf("  MLA R%d, R%d, R%d, R%d\n", d, n, m, a);
+	registers->r[d] = (result & 0xFFFFFFFF);
+	printf("  > R%d = %08X\n", d, registers->r[d]);
+}
+
 static void a6_7_75_t1(struct registers *registers,
                        uint16_t halfword)
 {
@@ -1114,13 +1130,6 @@ static void a6_7_75_t1(struct registers *registers,
 	registers->r[rd] = 0x00000000 + imm8;
 	printf("  > R%d = %08X\n", rd, imm8);
 	/* TODO: Set flags */
-}
-
-static void a6_7_73_t1(struct registers *registers,
-                       uint16_t first_halfword,
-                       uint16_t second_halfword)
-{
-	printf("  MLA\n");
 }
 
 static void a6_7_75_t2(struct registers *registers,
@@ -1162,6 +1171,25 @@ static void a6_7_75_t3(struct registers *registers,
 	registers->r[rd] = imm32;
 	printf("  MOVW R%d #0x%04X\n", rd, imm32);
 	printf("  > R%d = %08X\n", rd, imm32);
+}
+
+static void a6_7_76_t1(struct registers *registers,
+                       uint16_t halfword)
+{
+	uint8_t D = (halfword & 0x0080) >> 7;
+	uint8_t m = (halfword & 0x0078) >> 3;
+	uint8_t Rd = (halfword & 0x0007) >> 0;
+
+	uint8_t d = (D * 0x8) + Rd;
+	bool setflags = false;
+
+	uint32_t result = registers->r[m];
+	assert(d != 15);
+
+
+	printf("  MOV R%d, R%d\n", d, m);
+	registers->r[d] = result;
+	printf("  > R%d = %08X\n", d, registers->r[d]);
 }
 
 static void a6_7_87_t1(struct registers *registers, uint16_t halfword)
@@ -1514,11 +1542,32 @@ static void a5_2_2(struct registers *registers,
 }
 
 static void a5_2_3(struct registers *registers,
-                   uint16_t first_halfword)
+                   uint16_t halfword)
 {
-	uint8_t opcode = (first_halfword & 0x03C0) >> 6;
-	if ((opcode & 0xE) == 0xC) {
-		a6_7_20_t1(registers, first_halfword);
+	uint8_t opcode = (halfword & 0x03C0) >> 6;
+	if ((opcode & 0b1100) == 0b0000) {
+		printf("  ADD? a5_2_3");
+	}
+	else if (opcode == 0b0100) {
+		assert(false);
+	}
+	else if (opcode == 0b0101) {
+		printf("  CMP? a5_2_3");
+	}
+	else if ((opcode & 0b1110) == 0b0110) {
+		printf("  CMP? a5_2_3");
+	}
+	else if ((opcode & 0b1100) == 0b1000) {
+		a6_7_76_t1(registers, halfword); // MOV
+	}
+	else if ((opcode & 0b1110) == 0b1100) {
+		a6_7_20_t1(registers, halfword); // BX
+	}
+	else if ((opcode & 0b1110) == 0b1110) {
+		printf("  BLX? a5_2_3");
+	}
+	else {
+		assert(false);
 	}
 }
 
@@ -1654,6 +1703,7 @@ static void a5_2_6(struct registers *registers, uint16_t halfword)
 		assert(false); // UNDEFINED
 	}
 	else if (opcode == 0xF) {
+		assert(false);
 	}
 	else {
 		assert(false);
@@ -1983,7 +2033,7 @@ void teensy_3_2_emulate(uint8_t *data, uint32_t length) {
 	}
 
 	printf("\nExecution:\n");
-	for (int i = 0; i < 234; ++i){
+	for (int i = 0; i < 255; ++i){
 		step(&registers);
 	}
 }
