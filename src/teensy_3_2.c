@@ -1397,11 +1397,12 @@ static void a6_7_121_t3(struct registers *registers,
 }
 
 static void a6_7_128_t1(struct registers *registers,
-                       uint16_t first_halfword)
+                        uint16_t halfword)
 {
-	uint8_t rt = (first_halfword & 0x0007);
-	uint8_t rn = (first_halfword & 0x0038) >> 3;
-	uint8_t imm5 = (first_halfword & 0x07C0) >> 6;
+	uint8_t rt = (halfword & 0x0007);
+	uint8_t rn = (halfword & 0x0038) >> 3;
+	uint8_t imm5 = (halfword & 0x07C0) >> 6;
+
 	uint32_t imm32 = imm5 << 1;
 
 	uint32_t offset_addr = registers->r[rn] + imm32;
@@ -1412,6 +1413,43 @@ static void a6_7_128_t1(struct registers *registers,
 	printf("  STRH R%d [R%d, #%d]\n", rt, rn, imm32);
 
 	memory_write_halfword(address, value);
+}
+
+static void a6_7_132_t2(struct registers *registers,
+                        uint16_t halfword)
+{
+	uint8_t d = (halfword & 0x0700) >> 8;
+	uint8_t n = d;
+	uint8_t imm8 = (halfword & 0x00FF) >> 0;
+
+	uint32_t imm32 = imm8;
+
+	printf("  SUB R%d, R%d, #%d\n", d, n, imm32);
+
+	struct AddWithCarry_Result R =
+		AddWithCarry(registers->r[n], ~imm32, true);
+
+	// TODO: setflags
+	registers->r[d] = R.result;
+	printf("  > R%d = %08X\n", d, registers->r[d]);
+}
+
+static void a6_7_133_t1(struct registers *registers,
+                        uint16_t halfword)
+{
+	uint8_t m = (halfword & 0x01C0) >> 6;
+	uint8_t n = (halfword & 0x0038) >> 3;
+	uint8_t d = (halfword & 0x0007) >> 0;
+
+	printf("  SUB R%d, R%d, R%d\n", d, n, m);
+
+	uint32_t shifted = registers->r[m];
+	struct AddWithCarry_Result R =
+		AddWithCarry(registers->r[n], ~shifted, true);
+
+	// TODO: setflags
+	registers->r[d] = R.result;
+	printf("  > R%d = %08X\n", d, registers->r[d]);
 }
 
 static void a6_7_145_t1(struct registers *registers,
@@ -1460,7 +1498,7 @@ static void a5_2_1(struct registers *registers,
 		a6_7_4_t1(registers, halfword);
 	}
 	else if (opcode == 0b01101) {
-		printf("  SUB?\n");
+		a6_7_133_t1(registers, halfword); // SUB
 	}
 	else if (opcode == 0b01110) {
 		printf("  ADD?\n");
@@ -1478,7 +1516,7 @@ static void a5_2_1(struct registers *registers,
 		a6_7_3_t2(registers, halfword); // ADD
 	}
 	else if ((opcode & 0b11100) == 0b11100) {
-		printf("  SUB?\n");
+		a6_7_132_t2(registers, halfword); // SUB
 	}
 	else {
 		assert(false);
@@ -2033,7 +2071,7 @@ void teensy_3_2_emulate(uint8_t *data, uint32_t length) {
 	}
 
 	printf("\nExecution:\n");
-	for (int i = 0; i < 255; ++i){
+	for (int i = 0; i < 265; ++i){
 		step(&registers);
 	}
 }
