@@ -160,6 +160,11 @@ bool LastInITBlock(struct registers *registers)
 	return (registers->itstate & 0b00001111) == 0b1000;
 }
 
+uint32_t SP(struct registers *registers)
+{
+	return registers->r[13];
+}
+
 /* A4.2.2 */
 uint32_t PC(struct registers *registers)
 {
@@ -212,6 +217,64 @@ uint32_t ThumbExpandImm(struct registers *registers,
 static uint8_t *flash;
 
 static bool is_branch;
+
+static const char *get_condition_field(uint8_t cond)
+{
+	const char *field;
+	switch (cond) {
+	case 0b0000:
+		field = "EQ";
+		break;
+	case 0b0001:
+		field = "NE";
+		break;
+	case 0b0010:
+		field = "CS";
+		break;
+	case 0b0011:
+		field = "CC";
+		break;
+	case 0b0100:
+		field = "MI";
+		break;
+	case 0b0101:
+		field = "PL";
+		break;
+	case 0b0110:
+		field = "VS";
+		break;
+	case 0b0111:
+		field = "VC";
+		break;
+	case 0b1000:
+		field = "HI";
+		break;
+	case 0b1001:
+		field = "LS";
+		break;
+	case 0b1010:
+		field = "GE";
+		break;
+	case 0b1011:
+		field = "LT";
+		break;
+	case 0b1100:
+		field = "GT";
+		break;
+	case 0b1101:
+		field = "LE";
+		break;
+	case 0b1110:
+		field = "";
+		break;
+	case 0b1111:
+		field = "";
+		break;
+	default:
+		assert(false);
+	}
+	return field;
+}
 
 static const char *get_address_name(uint32_t address)
 {
@@ -470,6 +533,36 @@ static const char *get_address_name(uint32_t address)
 		break;
 	case 0x40064006:
 		name = "MCG_S";
+		break;
+	case 0x40072000:
+		name = "USB0_PERID";
+		break;
+	case 0x40072004:
+		name = "USB0_IDCOMP";
+		break;
+	case 0x40072008:
+		name = "USB0_REV";
+		break;
+	case 0x4007200C:
+		name = "USB0_ADDINFO";
+		break;
+	case 0x40072010:
+		name = "USB0_OTGISTAT";
+		break;
+	case 0x40072014:
+		name = "USB0_OTGICR";
+		break;
+	case 0x40072018:
+		name = "USB0_OTGSTAT";
+		break;
+	case 0x40072108:
+		name = "USB0_CONTROL";
+		break;
+	case 0x4007210C:
+		name = "USB0_USBTRC0";
+		break;
+	case 0x40072114:
+		name = "USB0_USBFRMADJUST";
 		break;
 	case 0x4007D000:
 		name = "PMC_LVDSC1";
@@ -811,6 +904,36 @@ static void a6_7_3_t2(struct registers *registers, uint16_t halfword)
 	printf(" R%d #%d\n", d, imm32);
 
 	registers->r[d] = R.result;
+	printf("  > R%d = %08X\n", d, registers->r[d]);
+}
+
+static void a6_7_3_t3(struct registers *registers,
+                      uint16_t first_halfword,
+                      uint16_t second_halfword)
+{
+	uint8_t i = (first_halfword & 0x0400) >> 10;
+	uint8_t S = (first_halfword & 0x0010) >> 4;
+	uint8_t n = (first_halfword & 0x000F) >> 0;
+	uint8_t imm3 = (second_halfword & 0x7000) >> 12;
+	uint8_t d = (second_halfword & 0x0F00) >> 8;
+	uint8_t imm8 = (second_halfword & 0x00FF) >> 0;
+
+	uint16_t imm12 = (i * 0x800)
+	                 + (imm3 * 0x100)
+	                 + imm8;
+
+	bool setflags = S == 1;
+	struct ThumbExpandImm_C_Result TR = ThumbExpandImm_C(imm12, false);
+
+	printf("  ADD");
+	if (setflags) {
+		printf("S");
+	}
+	printf(".W R%d, R%d, #%d\n", d, n, TR.imm32);
+
+	struct AddWithCarry_Result AR = AddWithCarry(registers->r[n], TR.imm32,
+	                                             false);
+	registers->r[d] = AR.result;
 	printf("  > R%d = %08X\n", d, registers->r[d]);
 }
 
@@ -1197,12 +1320,39 @@ static void a6_7_87_t1(struct registers *registers, uint16_t halfword)
 	printf("  NOP\n");
 }
 
-static void a6_7_98_t1(struct registers *registers,
-                       uint16_t first_word)
+static void a6_7_97_t1(struct registers *registers,
+                       uint16_t halfword)
 {
-	uint8_t register_list = first_word & 0x00FF;
-	uint8_t M = (first_word & 0x0100) >> 8;
-	uint16_t all_registers = (M << 14) + register_list;
+	uint8_t register_list = (halfword & 0x00FF) >> 0;
+	uint8_t P = (halfword & 0x0100) >> 8;
+
+	uint16_t all_registers = (P << 15) | register_list;
+	uint8_t bit_count = __builtin_popcount(all_registers);
+
+	uint32_t address = SP(registers);
+
+	printf("  POP {");
+	bool first = false;
+	for (uint8_t i = 0; i < 16; ++i) {
+		if ((all_registers & (0x0001 << i)) == (0x0001 << i)) {
+			if (!first) {
+				first = true;
+			}
+			else {
+				printf(", ");
+			}
+			printf("R%d", i);
+		}
+	}
+	printf("}\n");
+}
+
+static void a6_7_98_t1(struct registers *registers,
+                       uint16_t halfword)
+{
+	uint8_t register_list = (halfword & 0x00FF) >> 0;
+	uint8_t M = (halfword & 0x0100) >> 8;
+	uint16_t all_registers = (M << 14) | register_list;
 
 	uint8_t bit_count = __builtin_popcount(all_registers);
 	uint32_t address = registers->r[13] - 4 * bit_count;
@@ -1695,8 +1845,7 @@ static void a5_2_5(struct registers *registers, uint16_t halfword)
 		a6_7_21_t1(registers, halfword); // CBNZ, CBZ
 	}
 	else if ((opcode & 0b1110000) == 0b1100000) {
-		printf("  POP? a5_2_5\n");
-		assert(false);
+		a6_7_97_t1(registers, halfword); // POP
 	}
 	else if ((opcode & 0b1111000) == 0b1110000) {
 		printf("  BKPT? a5_2_5\n");
@@ -1839,7 +1988,8 @@ static void a5_3_1(struct registers *registers,
 	}
 	else if ((op & 0b11110) == 0b10000) {
 		if (!(rd == 0b1111)) {
-			printf("  ADD? a5_3_1\n");
+			a6_7_3_t3(registers, first_halfword,
+			          second_halfword); // ADD
 		}
 		else if (rd == 0b1111) {
 			printf("  CMN? a5_3_1\n");
@@ -2071,7 +2221,7 @@ void teensy_3_2_emulate(uint8_t *data, uint32_t length) {
 	}
 
 	printf("\nExecution:\n");
-	for (int i = 0; i < 265; ++i){
+	for (int i = 0; i < 287; ++i){
 		step(&registers);
 	}
 }
