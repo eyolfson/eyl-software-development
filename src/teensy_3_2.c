@@ -991,7 +991,7 @@ static void a6_7_12_t1(struct registers *registers, uint16_t halfword)
 	uint32_t imm32 = imm8 << 1;
 
 	uint32_t address = registers->r[15] + 4 + imm32;
-	printf("  B[todo] %08X\n", address);
+	printf("  B%s[todo] %08X\n", get_condition_field(cond), address);
 }
 
 static void a6_7_12_t2(struct registers *registers, uint16_t halfword)
@@ -999,8 +999,10 @@ static void a6_7_12_t2(struct registers *registers, uint16_t halfword)
 	uint16_t imm11 = (halfword & 0x7FF);
 	uint32_t imm32 = imm11 * 0x2;
 
+	uint8_t cond = CurrentCond(registers);
+
 	uint32_t address = PC(registers) + imm32;
-	printf("  B.N label_%08X\n", address);
+	printf("  B%s label_%08X\n", get_condition_field(cond), address);
 	registers->r[15] = address;
 	is_branch = true;
 	printf("  > R15 = %08X\n", address);
