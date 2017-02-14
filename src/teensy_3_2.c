@@ -41,8 +41,31 @@ enum SRType {
 	SRType_RRX,
 };
 
+static uint8_t *flash;
+
+static bool is_branch;
+
+static uint16_t halfword_at_address(uint32_t base)
+{
+	return flash[base] +
+	       + (flash[base + 1] * 0x100);
+}
+
 uint8_t CurrentCond(struct registers *registers)
 {
+	uint16_t first_halfword = halfword_at_address(registers->r[15]);
+	if ((first_halfword & 0xF000) == 0xD000) {
+		uint8_t cond = (first_halfword & 0x0F00) >> 8;
+		return cond;
+	}
+	else if ((first_halfword & 0xF800) == 0xF000) {
+		uint16_t second_halfword = halfword_at_address(registers->r[15] + 1);
+		if ((second_halfword & 0xD000) == 0x8000) {
+			uint8_t cond = (first_halfword & 0x03C0) >> 6;
+			return cond;
+		}
+	}
+
 	return (registers->itstate & 0xF0) >> 4;
 }
 
@@ -214,12 +237,10 @@ uint32_t ThumbExpandImm(struct registers *registers,
 	return ThumbExpandImm_C(imm12, APSR_C(registers)).imm32;
 }
 
-static uint8_t *flash;
-
-static bool is_branch;
-
-static const char *get_condition_field(uint8_t cond)
+static const char *get_condition_field(struct registers *registers)
 {
+	uint8_t cond = CurrentCond(registers);
+
 	const char *field;
 	switch (cond) {
 	case 0b0000:
@@ -833,12 +854,6 @@ static uint32_t memory_read_word(uint32_t address)
 	}
 }
 
-static uint16_t halfword_at_address(uint32_t base)
-{
-	return flash[base] +
-	       + (flash[base + 1] * 0x100);
-}
-
 static void set_bit(uint32_t *v, uint8_t i) { *v |= (1 << i); }
 
 static void b4_1_1_t1(struct registers *registers, uint16_t halfword)
@@ -991,7 +1006,7 @@ static void a6_7_12_t1(struct registers *registers, uint16_t halfword)
 	uint32_t imm32 = imm8 << 1;
 
 	uint32_t address = registers->r[15] + 4 + imm32;
-	printf("  B%s[todo] %08X\n", get_condition_field(cond), address);
+	printf("  B%s[todo] %08X\n", get_condition_field(registers), address);
 }
 
 static void a6_7_12_t2(struct registers *registers, uint16_t halfword)
@@ -1002,7 +1017,7 @@ static void a6_7_12_t2(struct registers *registers, uint16_t halfword)
 	uint8_t cond = CurrentCond(registers);
 
 	uint32_t address = PC(registers) + imm32;
-	printf("  B%s label_%08X\n", get_condition_field(cond), address);
+	printf("  B%s label_%08X\n", get_condition_field(registers), address);
 	registers->r[15] = address;
 	is_branch = true;
 	printf("  > R15 = %08X\n", address);
@@ -2223,7 +2238,7 @@ void teensy_3_2_emulate(uint8_t *data, uint32_t length) {
 	}
 
 	printf("\nExecution:\n");
-	for (int i = 0; i < 287; ++i){
+	for (int i = 0; i < 24; ++i){
 		step(&registers);
 	}
 }
