@@ -999,14 +999,35 @@ static void a6_7_8_t1(struct registers *registers,
 	printf("  > R%d = %08X\n", rd, registers->r[rd]);
 }
 
+static void BranchTo(struct registers *registers, uint32_t address)
+{
+	registers->r[15] = address;
+	printf("  > PC = %08X\n", registers->r[15]);
+	is_branch = true;
+}
+
+static void BranchWritePC(struct registers *registers, uint32_t address)
+{
+	BranchTo(registers, address & ~(0x1));
+}
+
+static void B(struct registers *registers, uint32_t imm32)
+{
+	if (ConditionPassed(registers)) {
+		BranchWritePC(registers, PC(registers) + imm32);
+	}
+}
+
 static void a6_7_12_t1(struct registers *registers, uint16_t halfword)
 {
 	uint8_t cond = (halfword & 0x0F00) >> 8;
 	uint8_t imm8 = (halfword & 0x00FF);
 	uint32_t imm32 = imm8 << 1;
 
-	uint32_t address = registers->r[15] + 4 + imm32;
-	printf("  B%s[todo] %08X\n", get_condition_field(registers), address);
+	uint32_t address = PC(registers) + imm32;
+	printf("  B%s label_%08X\n", get_condition_field(registers), address);
+
+	B(registers, imm32);
 }
 
 static void a6_7_12_t2(struct registers *registers, uint16_t halfword)
@@ -1014,13 +1035,10 @@ static void a6_7_12_t2(struct registers *registers, uint16_t halfword)
 	uint16_t imm11 = (halfword & 0x7FF);
 	uint32_t imm32 = imm11 * 0x2;
 
-	uint8_t cond = CurrentCond(registers);
-
 	uint32_t address = PC(registers) + imm32;
 	printf("  B%s label_%08X\n", get_condition_field(registers), address);
-	registers->r[15] = address;
-	is_branch = true;
-	printf("  > R15 = %08X\n", address);
+
+	B(registers, imm32);
 }
 
 static void a6_7_18_t1(struct registers *registers,
@@ -2238,7 +2256,7 @@ void teensy_3_2_emulate(uint8_t *data, uint32_t length) {
 	}
 
 	printf("\nExecution:\n");
-	for (int i = 0; i < 24; ++i){
+	for (int i = 0; i < 39; ++i){
 		step(&registers);
 	}
 }
