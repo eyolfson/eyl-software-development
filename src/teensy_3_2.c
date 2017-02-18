@@ -51,24 +51,6 @@ static uint16_t halfword_at_address(uint32_t base)
 	       + (flash[base + 1] * 0x100);
 }
 
-uint8_t CurrentCond(struct registers *registers)
-{
-	uint16_t first_halfword = halfword_at_address(registers->r[15]);
-	if ((first_halfword & 0xF000) == 0xD000) {
-		uint8_t cond = (first_halfword & 0x0F00) >> 8;
-		return cond;
-	}
-	else if ((first_halfword & 0xF800) == 0xF000) {
-		uint16_t second_halfword = halfword_at_address(registers->r[15] + 1);
-		if ((second_halfword & 0xD000) == 0x8000) {
-			uint8_t cond = (first_halfword & 0x03C0) >> 6;
-			return cond;
-		}
-	}
-
-	return (registers->itstate & 0xF0) >> 4;
-}
-
 uint8_t APSR_N(struct registers *registers)
 {
 	return (registers->apsr & 0x80000000) >> 31;
@@ -120,6 +102,53 @@ struct AddWithCarry_Result AddWithCarry(uint32_t x, uint32_t y, bool carry_in)
 	return R;
 }
 
+void ITAdvance(struct registers *registers)
+{
+	if ((registers->itstate & 0b00000111) == 0b00000000) {
+		registers->itstate = 0;
+	}
+	else {
+		uint8_t old_state = registers->itstate & 0b00011111;
+		uint8_t new_state = (old_state << 1) & 0b00011111;
+		registers->itstate = (registers->itstate & 0b11100000)
+		                     | new_state;
+	}
+	printf("ITAdvance, ITSTATE=%02X\n", registers->itstate);
+}
+
+bool InITBlock(struct registers *registers)
+{
+	return (registers->itstate & 0b00001111) != 0b0000;
+}
+
+bool LastInITBlock(struct registers *registers)
+{
+	return (registers->itstate & 0b00001111) == 0b1000;
+}
+
+uint8_t CurrentCond(struct registers *registers)
+{
+	// Directly from branch instructions
+	uint16_t first_halfword = halfword_at_address(registers->r[15]);
+	if ((first_halfword & 0xF000) == 0xD000) {
+		uint8_t cond = (first_halfword & 0x0F00) >> 8;
+		return cond;
+	}
+	else if ((first_halfword & 0xF800) == 0xF000) {
+		uint16_t second_halfword = halfword_at_address(registers->r[15] + 1);
+		if ((second_halfword & 0xD000) == 0x8000) {
+			uint8_t cond = (first_halfword & 0x03C0) >> 6;
+			return cond;
+		}
+	}
+
+	if (InITBlock(registers)) {
+		return (registers->itstate & 0xF0) >> 4;
+	}
+
+	return 0b1111; // TODO
+}
+
 bool ConditionPassed(struct registers *registers)
 {
 	uint8_t cond = CurrentCond(registers);
@@ -158,29 +187,6 @@ bool ConditionPassed(struct registers *registers)
 	}
 
 	return result;
-}
-
-void ITAdvance(struct registers *registers)
-{
-	if ((registers->itstate & 0b00000111) == 0b00000000) {
-		registers->itstate = 0;
-	}
-	else {
-		uint8_t old_state = registers->itstate & 0b00011111;
-		uint8_t new_state = (old_state << 1) & 0b00011111;
-		registers->itstate = (registers->itstate & 0b11100000)
-		                     | new_state;
-	}
-}
-
-bool InITBlock(struct registers *registers)
-{
-	return (registers->itstate & 0b00001111) != 0b0000;
-}
-
-bool LastInITBlock(struct registers *registers)
-{
-	return (registers->itstate & 0b00001111) == 0b1000;
 }
 
 uint32_t SP(struct registers *registers)
@@ -237,10 +243,8 @@ uint32_t ThumbExpandImm(struct registers *registers,
 	return ThumbExpandImm_C(imm12, APSR_C(registers)).imm32;
 }
 
-static const char *get_condition_field(struct registers *registers)
+static const char *get_condition_name(uint8_t cond)
 {
-	uint8_t cond = CurrentCond(registers);
-
 	const char *field;
 	switch (cond) {
 	case 0b0000:
@@ -295,6 +299,12 @@ static const char *get_condition_field(struct registers *registers)
 		assert(false);
 	}
 	return field;
+}
+
+static const char *get_condition_field(struct registers *registers)
+{
+	uint8_t cond = CurrentCond(registers);
+	return get_condition_name(cond);
 }
 
 static const char *get_address_name(uint32_t address)
@@ -1114,6 +1124,46 @@ static void a6_7_21_t1(struct registers *registers,
 		is_branch = true;
 	}
 }
+/*
+uint8_t APSR_N(struct registers *registers)
+{
+	return (registers->apsr & 0x80000000) >> 31;
+}
+
+uint8_t APSR_Z(struct registers *registers)
+{
+	return (registers->apsr & 0x40000000) >> 30;
+}
+
+uint8_t APSR_C(struct registers *registers)
+{
+	return (registers->apsr & 0x20000000) >> 29;
+}
+
+uint8_t APSR_V(struct registers *registers)
+{
+	return (registers->apsr & 0x10000000) >> 28;
+}
+*/
+
+static void CMP(struct registers *registers, uint8_t n, uint32_t imm32)
+{
+	struct AddWithCarry_Result R = AddWithCarry(registers->r[n],
+	                                            ~imm32, true);
+	uint32_t new_apsr = (R.result & 0x80000000);
+	if (R.result == 0) {
+		new_apsr |= 0x40000000;
+	}
+	if (R.carry_out) {
+		new_apsr |= 0x20000000;
+	}
+	if (R.overflow) {
+		new_apsr |= 0x10000000;
+	}
+	registers->apsr &= ~(0xF0000000);
+	registers->apsr |= new_apsr;
+	printf("  > APSR = %08X\n", registers->apsr);
+}
 
 static void a6_7_27_t1(struct registers *registers, uint16_t halfword)
 {
@@ -1124,6 +1174,7 @@ static void a6_7_27_t1(struct registers *registers, uint16_t halfword)
 
 	// TODO: CMP
 	printf("  CMP R%d, #%d\n", n, imm32);
+	CMP(registers, n, imm32);
 }
 
 static void a6_7_28_t1(struct registers *registers, uint16_t halfword)
@@ -1133,8 +1184,12 @@ static void a6_7_28_t1(struct registers *registers, uint16_t halfword)
 	enum SRType shift_t = SRType_LSL;
 	uint8_t shift_n = 0;
 
+	assert(shift_n == 0);
+	uint32_t shifted = registers->r[m];
+
 	// TODO: CMP
 	printf("  CMP R%d, R%d\n", n, m);
+	CMP(registers, n, shifted);
 }
 
 static void a6_7_37_t1(struct registers *registers, uint16_t halfword)
@@ -1142,59 +1197,10 @@ static void a6_7_37_t1(struct registers *registers, uint16_t halfword)
 	uint8_t firstcond = (halfword & 0x00F0) >> 4;
 	uint8_t mask = (halfword & 0x000F) >> 0;
 
-	printf("  IT");
-	switch (firstcond) {
-	case 0b0000:
-		printf(" EQ");
-		break;
-	case 0b0001:
-		printf(" NE");
-		break;
-	case 0b0010:
-		printf(" CS");
-		break;
-	case 0b0011:
-		printf(" CC");
-		break;
-	case 0b0100:
-		printf(" MI");
-		break;
-	case 0b0101:
-		printf(" PL");
-		break;
-	case 0b0110:
-		printf(" VS");
-		break;
-	case 0b0111:
-		printf(" VC");
-		break;
-	case 0b1000:
-		printf(" HI");
-		break;
-	case 0b1001:
-		printf(" LS");
-		break;
-	case 0b1010:
-		printf(" GE");
-		break;
-	case 0b1011:
-		printf(" LT");
-		break;
-	case 0b1100:
-		printf(" GT");
-		break;
-	case 0b1101:
-		printf(" LE");
-		break;
-	case 0b1110:
-		break;
-	case 0b1111:
-		break;
-	}
-	printf("\n");
-
 	assert(mask == 0b1000);
 
+assert(false && "TODO: Check advance");
+	printf("  IT %s\n", get_condition_name(firstcond));
 	registers->itstate = (halfword & 0x00FF) >> 0;
 	printf("  > ITSTATE = %02X\n", registers->itstate);
 }
@@ -2275,6 +2281,10 @@ static void step(struct registers *registers)
 		if (!is_branch) {
 			registers->r[15] += 2;
 		}
+	}
+
+	if (InITBlock(registers)) {
+		ITAdvance(registers);
 	}
 }
 
