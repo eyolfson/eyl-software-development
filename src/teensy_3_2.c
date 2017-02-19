@@ -76,6 +76,46 @@ uint8_t APSR_Q(struct registers *registers)
 	return (registers->apsr & 0x08000000) >> 27;
 }
 
+void APSR_N_set(struct registers *registers)
+{
+	registers->apsr |= 0x80000000;
+}
+
+void APSR_Z_set(struct registers *registers)
+{
+	registers->apsr |= 0x40000000;
+}
+
+void APSR_C_set(struct registers *registers)
+{
+	registers->apsr |= 0x20000000;
+}
+
+void APSR_V_set(struct registers *registers)
+{
+	registers->apsr |= 0x10000000;
+}
+
+void APSR_N_clear(struct registers *registers)
+{
+	registers->apsr &= ~0x80000000;
+}
+
+void APSR_Z_clear(struct registers *registers)
+{
+	registers->apsr &= ~0x40000000;
+}
+
+void APSR_C_clear(struct registers *registers)
+{
+	registers->apsr &= ~0x20000000;
+}
+
+void APSR_V_clear(struct registers *registers)
+{
+	registers->apsr &= ~0x10000000;
+}
+
 struct AddWithCarry_Result AddWithCarry(uint32_t x, uint32_t y, bool carry_in)
 {
 	struct AddWithCarry_Result R;
@@ -135,7 +175,7 @@ uint8_t CurrentCond(struct registers *registers)
 		return cond;
 	}
 	else if ((first_halfword & 0xF800) == 0xF000) {
-		uint16_t second_halfword = halfword_at_address(registers->r[15] + 1);
+		uint16_t second_halfword = halfword_at_address(registers->r[15] + 2);
 		if ((second_halfword & 0xD000) == 0x8000) {
 			uint8_t cond = (first_halfword & 0x03C0) >> 6;
 			return cond;
@@ -484,6 +524,12 @@ static const char *get_address_name(uint32_t address)
 	case 0x4003D010:
 		name = "RTC_CR";
 		break;
+	case 0x4003D014:
+		name = "RTC_SR";
+		break;
+	case 0x4003D018:
+		name = "RTC_LR";
+		break;
 	case 0x40047000:
 		name = "SIM_SOPT1";
 		break;
@@ -743,6 +789,27 @@ static const char *get_address_name(uint32_t address)
 
 	return name;
 }
+/*
+uint8_t APSR_N(struct registers *registers)
+{
+	return (registers->apsr & 0x80000000) >> 31;
+}
+
+uint8_t APSR_Z(struct registers *registers)
+{
+	return (registers->apsr & 0x40000000) >> 30;
+}
+
+uint8_t APSR_C(struct registers *registers)
+{
+	return (registers->apsr & 0x20000000) >> 29;
+}
+
+uint8_t APSR_V(struct registers *registers)
+{
+	return (registers->apsr & 0x10000000) >> 28;
+}
+*/
 
 static void memory_write_byte(uint32_t address, uint8_t byte)
 {
@@ -769,7 +836,7 @@ static void memory_write_halfword(uint32_t address, uint16_t halfword)
 {
 	const char *name = get_address_name(address);
 
-	printf("  > MemU[%08X, 4]", address);
+	printf("  > MemU[%08X, 2]", address);
 	if (name) {
 		printf(" (%s)", name);
 	}
@@ -984,29 +1051,56 @@ static void a6_7_8_t1(struct registers *registers,
 {
 	uint8_t i = (first_halfword & 0x0400) >> 10;
 	uint8_t S = (first_halfword & 0x0010) >> 4;
-	uint8_t rn = (first_halfword & 0x000F);
+	uint8_t n = (first_halfword & 0x000F) >> 0;
 	uint8_t imm3 = (second_halfword & 0x7000) >> 12;
-	uint8_t rd = (second_halfword & 0x0F00) >> 8;
-	uint8_t imm8 = (second_halfword & 0x00FF);
+	uint8_t d = (second_halfword & 0x0F00) >> 8;
+	uint8_t imm8 = (second_halfword & 0x00FF) >> 0;
 
-	if (rd == 0xF && S == 1) {
+	if (d == 0xF && S == 1) {
 		assert(false);
 	}
 
+	bool setflags = S == 1;
 	uint16_t imm12 = (i * 0x800)
 	                 + (imm3 * 0x100)
 	                 + imm8;
+	struct ThumbExpandImm_C_Result R = ThumbExpandImm_C(imm12, APSR_C(registers));
 
-	struct ThumbExpandImm_C_Result result = ThumbExpandImm_C(imm12, false);
-
-	printf("  AND");
-	if (S) {
-		printf("S");
+	if (setflags) {
+		printf("  ANDS%s R%d, R%d, #0x%08X\n",
+		       get_condition_field(registers), d, n, R.imm32);
 	}
-	printf(" R%d, R%d, #0x%08X\n", rd, rn, result.imm32);
+	else {
+		printf("  AND%s R%d, R%d, #0x%08X\n",
+		        get_condition_field(registers), d, n, R.imm32);
+	}
 
-	registers->r[rd] = registers->r[rn] & result.imm32;
-	printf("  > R%d = %08X\n", rd, registers->r[rd]);
+	if (ConditionPassed(registers)) {
+		int32_t result = registers->r[n] & R.imm32;
+		registers->r[d] = result;
+		printf("  > R%d = %08X\n", d, registers->r[d]);
+		if (setflags) {
+			if ((result & 0x80000000) == 0x80000000) {
+				APSR_N_set(registers);
+			}
+			else {
+				APSR_N_clear(registers);
+			}
+			if (result == 0) {
+				APSR_Z_set(registers);
+			}
+			else {
+				APSR_Z_clear(registers);
+			}
+			if (R.carry) {
+				APSR_C_set(registers);
+			}
+			else {
+				APSR_C_clear(registers);
+			}
+			printf("  > APSR = %08X\n", registers->apsr);
+		}
+	}
 }
 
 static void BranchTo(struct registers *registers, uint32_t address)
@@ -1071,10 +1165,8 @@ static void a6_7_18_t1(struct registers *registers,
 		imm32 |= 0xFF000000;
 	}
 
-	/* The PC is a halfword ahead of where it should be, so instead of
-	   adding 4 (for a normal read), we add 2 */
 	uint32_t next_instr_addr = registers->r[15] + 4;
-	uint32_t lr_value = next_instr_addr  | 0x1;
+	uint32_t lr_value = next_instr_addr | 0x1;
 	uint32_t address = registers->r[15] + 4 + imm32;
 	/* Set the last bit to zero */
 	address &= 0xFFFFFFFE;
@@ -1124,27 +1216,6 @@ static void a6_7_21_t1(struct registers *registers,
 		is_branch = true;
 	}
 }
-/*
-uint8_t APSR_N(struct registers *registers)
-{
-	return (registers->apsr & 0x80000000) >> 31;
-}
-
-uint8_t APSR_Z(struct registers *registers)
-{
-	return (registers->apsr & 0x40000000) >> 30;
-}
-
-uint8_t APSR_C(struct registers *registers)
-{
-	return (registers->apsr & 0x20000000) >> 29;
-}
-
-uint8_t APSR_V(struct registers *registers)
-{
-	return (registers->apsr & 0x10000000) >> 28;
-}
-*/
 
 static void CMP(struct registers *registers, uint8_t n, uint32_t imm32)
 {
@@ -1285,15 +1356,59 @@ static void a6_7_73_t1(struct registers *registers,
 	printf("  > R%d = %08X\n", d, registers->r[d]);
 }
 
+static void MOV_immediate(struct registers *registers,
+                          uint8_t d,
+                          bool setflags,
+                          uint32_t imm32,
+                          bool carry)
+{
+	if (ConditionPassed(registers)) {
+		uint32_t result = imm32;
+		registers->r[d] = imm32;
+		printf("  > R%d = %08X\n", d, imm32);
+		if (setflags) {
+			if ((result & 0x80000000) == 0x80000000) {
+				APSR_N_set(registers);
+			}
+			else {
+				APSR_N_clear(registers);
+			}
+			if (result == 0) {
+				APSR_Z_set(registers);
+			}
+			else {
+				APSR_Z_clear(registers);
+			}
+			if (carry) {
+				APSR_C_set(registers);
+			}
+			else {
+				APSR_C_clear(registers);
+			}
+			printf("  > APSR = %08X\n", registers->apsr);
+		}
+	}
+}
+
 static void a6_7_75_t1(struct registers *registers,
                        uint16_t halfword)
 {
-	uint8_t rd = (halfword & 0x0700) >> 8;
-	uint8_t imm8 = (halfword & 0x00FF);
-	printf("  MOVS R%d #%d\n", rd, imm8);
-	registers->r[rd] = 0x00000000 + imm8;
-	printf("  > R%d = %08X\n", rd, imm8);
-	/* TODO: Set flags */
+	uint8_t d = (halfword & 0x0700) >> 8;
+	uint8_t imm8 = (halfword & 0x00FF) >> 0;
+
+	bool setflags;
+	if (InITBlock(registers)) {
+		setflags = false;
+		printf("  MOV%s R%d, #%d\n", d, imm8);
+	}
+	else {
+		setflags = true;
+		printf("  MOVS R%d, #%d\n", d, imm8);
+	}
+	uint32_t imm32 = imm8;
+	bool carry = APSR_C(registers);
+
+	MOV_immediate(registers, d, setflags, imm32, carry);
 }
 
 static void a6_7_75_t2(struct registers *registers,
@@ -2301,11 +2416,15 @@ void teensy_3_2_emulate(uint8_t *data, uint32_t length) {
 	printf("Initial Program Counter: %08X\n", initial_pc);
 	printf("NMI Address:             %08X\n", nmi_address);
 
+	registers.apsr = 0; // Acutally unknown value
+
 	/* R15 (Program Counter):
      EPSR (Execution Program Status Register): bit 24 is the Thumb bit */
 	const uint8_t EPSR_T_BIT = 24;
 
+	registers.itstate = 0;
 	registers.r[13] = initial_sp;
+	registers.r[14] = 0xFFFFFFFF;
 	registers.r[15] = initial_pc & 0xFFFFFFFE;
 	registers.epsr = 0x01000000;
 	if ((initial_pc & 0x00000001) == 0x00000001) {
@@ -2313,7 +2432,7 @@ void teensy_3_2_emulate(uint8_t *data, uint32_t length) {
 	}
 
 	printf("\nExecution:\n");
-	for (int i = 0; i < 48; ++i){
+	for (int i = 0; i < 29; ++i){
 		step(&registers);
 	}
 }
