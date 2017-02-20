@@ -1034,15 +1034,51 @@ static void a6_7_4_t1(struct registers *registers, uint16_t halfword)
 	uint8_t m = (halfword & 0x01C0) >> 6;
 	uint8_t n = (halfword & 0x0038) >> 3;
 	uint8_t d = (halfword & 0x0007) >> 0;
-	printf("  ADDS R%d, R%d, R%d\n", d, n, m);
 
-	uint32_t result = registers->r[n] + registers->r[m];
+	bool setflags = !InITBlock(registers);
+	if (setflags) {
+		printf("  ADDS R%d, R%d, R%d\n", d, n, m);
+	}
+	else {
+		printf("  ADD%s R%d, R%d, R%d\n",
+		       get_condition_field(registers), d, n, m);
+	}
 
-	registers->r[d] = result;
-	printf("  > R%d = %08X\n", d, result);
+	uint32_t shifted = registers->r[m];
+	struct AddWithCarry_Result R = AddWithCarry(registers->r[n],
+	                                            shifted, false);
 
-	/* TODO: Add with carry */
-	/* TODO: Set flags */
+	assert(d != 15);
+
+	registers->r[d] = R.result;
+	printf("  > R%d = %08X\n", d, registers->r[d]);
+	if (setflags) {
+			if ((R.result & 0x80000000) == 0x80000000) {
+				APSR_N_set(registers);
+			}
+			else {
+				APSR_N_clear(registers);
+			}
+			if (R.result == 0) {
+				APSR_Z_set(registers);
+			}
+			else {
+				APSR_Z_clear(registers);
+			}
+			if (R.carry_out) {
+				APSR_C_set(registers);
+			}
+			else {
+				APSR_C_clear(registers);
+			}
+			if (R.overflow) {
+				APSR_V_set(registers);
+			}
+			else {
+				APSR_V_clear(registers);
+			}
+			printf("  > APSR = %08X\n", registers->apsr);
+	}
 }
 
 static void a6_7_8_t1(struct registers *registers,
@@ -1337,7 +1373,7 @@ static void a6_7_67_t1(struct registers *registers,
 	printf("  LSL R%d, R%d, #%d\n", d, m, imm5);
 	// TODO
 	registers->r[d] = registers->r[m] << imm5;
-	printf("  R%d = %08X\n", d, registers->r[d]);
+	printf("  > R%d = %08X\n", d, registers->r[d]);
 }
 
 static void a6_7_73_t1(struct registers *registers,
@@ -2432,7 +2468,7 @@ void teensy_3_2_emulate(uint8_t *data, uint32_t length) {
 	}
 
 	printf("\nExecution:\n");
-	for (int i = 0; i < 29; ++i){
+	for (int i = 0; i < 56; ++i){
 		step(&registers);
 	}
 }
