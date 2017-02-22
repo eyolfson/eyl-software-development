@@ -1430,6 +1430,57 @@ static void a6_7_43_t1(struct registers *registers, uint16_t halfword)
 	LDR_literal(registers, t, imm32, true);
 }
 
+static void LDR_register(struct registers *registers,
+                         uint8_t t, uint8_t n, uint8_t m,
+                         bool index, bool add, bool wback,
+                         enum SRType shift_t, uint8_t shift_n)
+{
+	assert(shift_t == SRType_LSL);
+	assert(shift_n == 0);
+
+	if (ConditionPassed(registers)) {
+		uint32_t offset = registers->r[m];
+		uint32_t offset_addr;
+		if (add) {
+			offset_addr = registers->r[n] + offset;
+		}
+		else {
+			offset_addr = registers->r[n] - offset;
+		}
+		uint32_t address;
+		if (index) {
+			address = offset_addr;
+		}
+		else {
+			address = registers->r[n];
+		}
+		uint32_t data = memory_word_read(address);
+		if (wback) {
+			registers->r[n] = offset_addr;
+			printf("  > R%d = %08X\n", n, registers->r[n]);
+		}
+
+		if (t == 15) {
+			assert(false);
+		}
+		else {
+			registers->r[t] = data;
+			printf("  > R%d = %08X\n", t, registers->r[t]);
+		}
+	}
+}
+
+static void a6_7_44_t1(struct registers *registers, uint16_t halfword)
+{
+	uint8_t m = (halfword & 0x01C0) >> 6;
+	uint8_t n = (halfword & 0x0038) >> 3;
+	uint8_t t = (halfword & 0x0007) >> 0;
+
+	printf("  LDR%s R%d, [R%d, R%d]\n",
+	       get_condition_field(registers), t, n, m);
+	LDR_register(registers, t, n, m, true, true, false, SRType_LSL, 0);
+}
+
 static void a6_7_45_t1(struct registers *registers,
                        uint16_t halfword)
 {
@@ -2082,7 +2133,37 @@ static void a5_2_4(struct registers *registers,
 	uint8_t opA = (halfword & 0xF000) >> 12;
 	uint8_t opB = (halfword & 0x0E00) >> 9;
 
-	if (opA == 0b0110) {
+	if (opA == 0b0101) {
+		switch (opB) {
+		case 0b000:
+			printf("  STR? a5_2_4\n");
+			break;
+		case 0b001:
+			printf("  STRH? a5_2_4\n");
+			break;
+		case 0b010:
+			printf("  STRB? a5_2_4\n");
+			break;
+		case 0b011:
+			printf("  LDRSB? a5_2_4\n");
+			break;
+		case 0b100:
+			a6_7_44_t1(registers, halfword); // LDR
+			break;
+		case 0b101:
+			printf("  LDRH? a5_2_4\n");
+			break;
+		case 0b110:
+			printf("  LDRB? a5_2_4\n");
+			break;
+		case 0b111:
+			printf("  LDRSH? a5_2_4\n");
+			break;
+		default:
+			assert(false);
+		}
+	}
+	else if (opA == 0b0110) {
 		if ((opB & 0x4) == 0x0) {
 			a6_7_119_t1(registers, halfword);
 		}
@@ -2102,6 +2183,12 @@ static void a5_2_4(struct registers *registers,
 		if ((opB & 0x4) == 0x0) {
 			a6_7_128_t1(registers, halfword);
 		}
+		else {
+			assert(false);
+		}
+	}
+	else {
+		assert(false);
 	}
 }
 
