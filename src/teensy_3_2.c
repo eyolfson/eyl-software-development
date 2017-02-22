@@ -34,38 +34,40 @@ static uint8_t memory_byte_read(uint32_t address)
 
 static uint16_t memory_halfword_read(uint32_t address)
 {
-	uint16_t value = memory_read(address)
-	               | (memory_read(address + 1) << 8);
-	// printf("  > READ MemU[%08X,2] = %04X\n", address, value);
-	return value;
+	uint16_t data = memory_read(address)
+	              | (memory_read(address + 1) << 8);
+	// printf("  > READ MemU[%08X,2] = %04X\n", address, data);
+	return data;
 }
 
 static uint32_t memory_word_read(uint32_t address)
 {
-	uint32_t value =  memory_read(address)
-	                  | (memory_read(address + 1) << 8)
-	                  | (memory_read(address + 2) << 16)
-	                  | (memory_read(address + 3) << 24);
-	printf("  > READ MemU[%08X,4] = %08X\n", address, value);
-	return value;
+	uint32_t data =  memory_read(address)
+	                 | (memory_read(address + 1) << 8)
+	                 | (memory_read(address + 2) << 16)
+	                 | (memory_read(address + 3) << 24);
+	printf("  > READ MemU[%08X,4] = %08X\n", address, data);
+	return data;
 }
 
-static void memory_write(uint32_t address, uint8_t value)
+static void memory_write(uint32_t address, uint8_t data)
 {
 	if (address < 0x08000000) {
-		flash[address] = value;
+		assert(false);
+		flash[address] = data;
 	}
 	else if ((address >= SRAM_LOWER) && (address <= SRAM_UPPER)) {
-		sram[address - SRAM_LOWER] = value;
+		sram[address - SRAM_LOWER] = data;
 	}
 }
 
-static uint32_t memory_word_write(uint32_t address, uint32_t value)
+static uint32_t memory_word_write(uint32_t address, uint32_t data)
 {
-	memory_write(address    , value      );
-	memory_write(address + 1, value >>  8);
-	memory_write(address + 2, value >> 16);
-	memory_write(address + 3, value >> 24);
+	printf("  > MemU[%08X,4] = %08X\n", address, data);
+	memory_write(address    , data      );
+	memory_write(address + 1, data >>  8);
+	memory_write(address + 2, data >> 16);
+	memory_write(address + 3, data >> 24);
 }
 
 struct registers {
@@ -1848,8 +1850,40 @@ static void a6_7_119_t4(struct registers *registers,
 	STR_immediate(registers, t, n, imm32, index, add, wback);
 }
 
+static void STR_register(struct registers *registers,
+                         uint8_t t, uint8_t n, uint8_t m,
+                         bool index, bool add, bool wback,
+                         enum SRType shift_t, uint8_t shift_n)
+{
+	assert(shift_t == SRType_LSL);
+	assert(shift_n == 0);
+
+	if (ConditionPassed(registers)) {
+		uint32_t offset = registers->r[m];
+		uint32_t address = registers->r[n] + offset;
+		uint32_t data = registers->r[t];
+		memory_word_write(address, data);
+	}
+}
+
+static void a6_7_120_t1(struct registers *registers,
+                        uint16_t halfword)
+{
+	uint8_t m = (halfword & 0x01C0) >> 6;
+	uint8_t n = (halfword & 0x0038) >> 3;
+	uint8_t t = (halfword & 0x0007) >> 0;
+
+	bool index = true;
+	bool add = true;
+	bool wback = false;
+
+	printf("  STR%s R%d, [R%d, R%d]\n",
+	       get_condition_field(registers), t, n, m);
+	STR_register(registers, t, n, m, index, add, wback, SRType_LSL, 0);
+}
+
 static void STRB(struct registers *registers,
-                 uint8_t t, uint8_t n, int32_t imm32,
+                 uint8_t t, uint8_t n, uint32_t imm32,
                  bool index, bool add, bool wback)
 {
 	uint32_t offset_addr;
@@ -2136,7 +2170,7 @@ static void a5_2_4(struct registers *registers,
 	if (opA == 0b0101) {
 		switch (opB) {
 		case 0b000:
-			printf("  STR? a5_2_4\n");
+			a6_7_120_t1(registers, halfword); // STR
 			break;
 		case 0b001:
 			printf("  STRH? a5_2_4\n");
@@ -2662,7 +2696,7 @@ void teensy_3_2_emulate(uint8_t *data, uint32_t length) {
 	}
 
 	printf("\nExecution:\n");
-	for (int i = 0; i < 42; ++i){
+	for (int i = 0; i < 2352; ++i){
 		step(&registers);
 	}
 }
