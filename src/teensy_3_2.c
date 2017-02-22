@@ -52,7 +52,6 @@ static void memory_write(uint32_t address, uint8_t value)
 		flash[address] = value;
 	}
 	else if (address <= SRAM_UPPER) {
-printf("OKA %08X = %02X\n", address , value);
 		sram[address - SRAM_LOWER] = value;
 	}
 }
@@ -1199,7 +1198,8 @@ static void BranchWritePC(struct registers *registers, uint32_t address)
 
 static void BXWritePC(struct registers *registers, uint32_t address)
 {
-	printf("  > BXWritePC %08X\n", address);
+	assert((address & 0x00000001) == 0x00000001);
+	BranchTo(registers, address & 0xFFFFFFFE);
 }
 
 static void LoadWritePC(struct registers *registers, uint32_t address)
@@ -1619,20 +1619,20 @@ static void a6_7_97_t1(struct registers *registers,
 
 	for (uint8_t i = 0; i < 15; ++i) {
 		if ((all_registers & (0x0001 << i)) == (0x0001 << i)) {
-			registers->r[i] = flash[address];
+			registers->r[i] = memory_word_read(address);
 			printf("  > R%d = %08X (MemA[%08X, 4])\n",
 			       i, registers->r[i], address);
 			address += 4;
 		}
 	}
 	if ((all_registers & (0x0001 << 15)) == (0x0001 << 15)) {
-/*
 		uint32_t arg = memory_word_read(address);
-		printf("  > MemA[%08X, 4] = %08X\n", address, arg);
 		LoadWritePC(registers, arg);
-		printf("  > R15 \n");
-*/
 	}
+
+	address = registers->r[13] + 4 * bit_count;
+	registers->r[13] = address;
+	printf("  > R13 = %08X\n", address);
 }
 
 static void a6_7_98_t1(struct registers *registers,
@@ -2541,7 +2541,7 @@ void teensy_3_2_emulate(uint8_t *data, uint32_t length) {
 	}
 
 	printf("\nExecution:\n");
-	for (int i = 0; i < 56; ++i){
+	for (int i = 0; i < 47; ++i){
 		step(&registers);
 	}
 }
