@@ -22,7 +22,7 @@ static uint8_t memory_read(uint32_t address)
 	if (address < 0x08000000) {
 		return flash[address];
 	}
-	else if (address <= SRAM_UPPER) {
+	else if ((address >= SRAM_LOWER) && (address <= SRAM_UPPER)) {
 		return sram[address - SRAM_LOWER];
 	}
 }
@@ -51,7 +51,7 @@ static void memory_write(uint32_t address, uint8_t value)
 	if (address < 0x08000000) {
 		flash[address] = value;
 	}
-	else if (address <= SRAM_UPPER) {
+	else if ((address >= SRAM_LOWER) && (address <= SRAM_UPPER)) {
 		sram[address - SRAM_LOWER] = value;
 	}
 }
@@ -1803,7 +1803,7 @@ static void STRB(struct registers *registers,
 static void a6_7_121_t1(struct registers *registers,
                         uint16_t halfword)
 {
-	uint8_t imm5 = (halfword & 0x07C00) >> 6;
+	uint8_t imm5 = (halfword & 0x07C0) >> 6;
 	uint8_t n = (halfword & 0x0038) >> 3;
 	uint8_t t = (halfword & 0x0007) >> 0;
 
@@ -1914,8 +1914,8 @@ static void a6_7_149_t1(struct registers *registers,
 	uint32_t value = (registers->r[rm] & 0x000000FF);
 
 	printf("  UXTB R%d, R%d\n", rd, rm);
-	printf("  > R%d = %08X\n", rd, value);
 	registers->r[rd] = value;
+	printf("  > R%d = %08X\n", rd, registers->r[rd]);
 }
 
 static void a5_2_1(struct registers *registers,
