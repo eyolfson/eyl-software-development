@@ -11,6 +11,60 @@
 #define SRAM_LOWER 0x1FFF8000
 #define SRAM_UPPER 0x20007FFF
 
+static uint8_t program_flash[0x40000]; // 256 KiB
+static uint8_t eeprom[0x800];          //   2 KiB
+static uint8_t sram[0x10000];          //  64 KiB
+
+static uint8_t *flash;
+
+static uint8_t memory_read(uint32_t address)
+{
+	if (address < 0x08000000) {
+		return flash[address];
+	}
+	else if (address <= SRAM_UPPER) {
+		return sram[address - SRAM_LOWER];
+	}
+}
+
+static uint8_t memory_byte_read(uint32_t address)
+{
+	return memory_read(address);
+}
+
+static uint16_t memory_halfword_read(uint32_t address)
+{
+	return memory_read(address)
+	       | (memory_read(address + 1) << 8);
+}
+
+static uint32_t memory_word_read(uint32_t address)
+{
+	return memory_read(address)
+	       | (memory_read(address + 1) << 8)
+	       | (memory_read(address + 2) << 16)
+	       | (memory_read(address + 3) << 24);
+}
+
+static void memory_write(uint32_t address, uint8_t value)
+{
+	if (address < 0x08000000) {
+		flash[address] = value;
+	}
+	else if (address <= SRAM_UPPER) {
+printf("OKA %08X = %02X\n", address , value);
+		sram[address - SRAM_LOWER] = value;
+	}
+}
+
+static uint32_t memory_word_write(uint32_t address, uint32_t value)
+{
+	memory_write(address    , value      );
+	memory_write(address + 1, value >>  8);
+	memory_write(address + 2, value >> 16);
+	memory_write(address + 3, value >> 24);
+}
+
 struct registers {
 	uint32_t r[16];
 	uint32_t apsr;
@@ -41,15 +95,7 @@ enum SRType {
 	SRType_RRX,
 };
 
-static uint8_t *flash;
-
 static bool is_branch;
-
-static uint16_t halfword_at_address(uint32_t base)
-{
-	return flash[base] +
-	       + (flash[base + 1] * 0x100);
-}
 
 uint8_t APSR_N(struct registers *registers)
 {
@@ -169,13 +215,13 @@ bool LastInITBlock(struct registers *registers)
 uint8_t CurrentCond(struct registers *registers)
 {
 	// Directly from branch instructions
-	uint16_t first_halfword = halfword_at_address(registers->r[15]);
+	uint16_t first_halfword = memory_halfword_read(registers->r[15]);
 	if ((first_halfword & 0xF000) == 0xD000) {
 		uint8_t cond = (first_halfword & 0x0F00) >> 8;
 		return cond;
 	}
 	else if ((first_halfword & 0xF800) == 0xF000) {
-		uint16_t second_halfword = halfword_at_address(registers->r[15] + 2);
+		uint16_t second_halfword = memory_halfword_read(registers->r[15] + 2);
 		if ((second_halfword & 0xD000) == 0x8000) {
 			uint8_t cond = (first_halfword & 0x03C0) >> 6;
 			return cond;
@@ -1151,6 +1197,16 @@ static void BranchWritePC(struct registers *registers, uint32_t address)
 	BranchTo(registers, address & ~(0x1));
 }
 
+static void BXWritePC(struct registers *registers, uint32_t address)
+{
+	printf("  > BXWritePC %08X\n", address);
+}
+
+static void LoadWritePC(struct registers *registers, uint32_t address)
+{
+	BXWritePC(registers, address);
+}
+
 static void B(struct registers *registers, uint32_t imm32)
 {
 	if (ConditionPassed(registers)) {
@@ -1544,8 +1600,6 @@ static void a6_7_97_t1(struct registers *registers,
 	uint16_t all_registers = (P << 15) | register_list;
 	uint8_t bit_count = __builtin_popcount(all_registers);
 
-	uint32_t address = SP(registers);
-
 	printf("  POP {");
 	bool first = false;
 	for (uint8_t i = 0; i < 16; ++i) {
@@ -1560,6 +1614,25 @@ static void a6_7_97_t1(struct registers *registers,
 		}
 	}
 	printf("}\n");
+
+	uint32_t address = SP(registers);
+
+	for (uint8_t i = 0; i < 15; ++i) {
+		if ((all_registers & (0x0001 << i)) == (0x0001 << i)) {
+			registers->r[i] = flash[address];
+			printf("  > R%d = %08X (MemA[%08X, 4])\n",
+			       i, registers->r[i], address);
+			address += 4;
+		}
+	}
+	if ((all_registers & (0x0001 << 15)) == (0x0001 << 15)) {
+/*
+		uint32_t arg = memory_word_read(address);
+		printf("  > MemA[%08X, 4] = %08X\n", address, arg);
+		LoadWritePC(registers, arg);
+		printf("  > R15 \n");
+*/
+	}
 }
 
 static void a6_7_98_t1(struct registers *registers,
@@ -1588,8 +1661,8 @@ static void a6_7_98_t1(struct registers *registers,
 
 	for (uint8_t i = 0; i < 15; ++i) {
 		if ((all_registers & (0x0001 << i)) == (0x0001 << i)) {
-			flash[address & 0xFFFFFFFC] = registers->r[i];
-			printf("  > MEM[%08X] = %08X (R%d)\n",
+			memory_word_write(address & 0xFFFFFFFC, registers->r[i]);
+			printf("  > MEM[%08X, 4] = %08X (R%d)\n",
 			       address & 0xFFFFFFFC, registers->r[i], i);
 			address += 4;
 		}
@@ -2416,12 +2489,12 @@ static void step(struct registers *registers)
 {
 	is_branch = false;
 
-	uint16_t halfword = halfword_at_address(registers->r[15]);
+	uint16_t halfword = memory_halfword_read(registers->r[15]);
 	if (((halfword & 0xE000) == 0xE000)
 	    && ((halfword & 0x1800) != 0x0000)) {
 		uint16_t first_halfword = halfword;
 		uint16_t second_halfword
-			= halfword_at_address(registers->r[15] + 2);
+			= memory_halfword_read(registers->r[15] + 2);
 		a5_3(registers, first_halfword, second_halfword);
 		if (!is_branch) {
 			registers->r[15] += 4;
