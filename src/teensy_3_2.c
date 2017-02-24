@@ -38,6 +38,9 @@ static uint8_t memory_read(uint32_t address)
 			if (MCG_S_reads == 3) {
 				return 0x08;
 			}
+			if (MCG_S_reads == 4) {
+				return 0x20;
+			}
 		}
 		return 0;
 	}
