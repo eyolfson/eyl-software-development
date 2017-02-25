@@ -1330,7 +1330,7 @@ static void a6_7_98_t1(struct registers *registers,
 	}
 	printf("}\n");
 
-	printf("  > Note: lower registeers pushed first\n");
+	printf("  > Note: lower registers pushed first\n");
 	for (uint8_t i = 0; i < 15; ++i) {
 		if ((all_registers & (0x0001 << i)) == (0x0001 << i)) {
 			memory_word_write(address & 0xFFFFFFFC, registers->r[i]);
@@ -2284,7 +2284,7 @@ void teensy_3_2_emulate(uint8_t *data, uint32_t length) {
 	}
 
 	printf("\nExecution:\n");
-	for (int i = 0; i < 3522; ++i){
+	for (int i = 0; i < 3564; ++i){
 		step(&registers);
 	}
 }
