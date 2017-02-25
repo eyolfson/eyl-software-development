@@ -297,6 +297,12 @@ const char *get_address_name(uint32_t address)
 	case 0x40072114:
 		name = "USB0_USBFRMADJUST";
 		break;
+	case 0x40074000:
+		name = "VREF_TRM";
+		break;
+	case 0x40074001:
+		name = "VREF_SC";
+		break;
 	case 0x4007D000:
 		name = "PMC_LVDSC1";
 		break;

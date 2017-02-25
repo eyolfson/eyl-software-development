@@ -41,6 +41,12 @@ static uint8_t memory_read(uint32_t address)
 			if (MCG_S_reads == 4) {
 				return 0x20;
 			}
+			if (MCG_S_reads == 5) {
+				return 0x40;
+			}
+			if (MCG_S_reads == 6) {
+				return 0x0C;
+			}
 		}
 		return 0;
 	}
@@ -1324,11 +1330,10 @@ static void a6_7_98_t1(struct registers *registers,
 	}
 	printf("}\n");
 
+	printf("  > Note: lower registeers pushed first\n");
 	for (uint8_t i = 0; i < 15; ++i) {
 		if ((all_registers & (0x0001 << i)) == (0x0001 << i)) {
 			memory_word_write(address & 0xFFFFFFFC, registers->r[i]);
-			printf("  > MEM[%08X, 4] = %08X (R%d)\n",
-			       address & 0xFFFFFFFC, registers->r[i], i);
 			address += 4;
 		}
 	}
@@ -2279,7 +2284,7 @@ void teensy_3_2_emulate(uint8_t *data, uint32_t length) {
 	}
 
 	printf("\nExecution:\n");
-	for (int i = 0; i < 3434; ++i){
+	for (int i = 0; i < 3522; ++i){
 		step(&registers);
 	}
 }
