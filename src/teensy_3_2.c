@@ -20,6 +20,7 @@ static uint8_t sram[0x10000];          //  64 KiB
 static uint8_t *flash;
 
 static uint32_t MCG_S_reads = 0;
+static uint32_t systick_millis_count_reads = 0;
 
 static uint8_t memory_read(uint32_t address)
 {
@@ -27,6 +28,17 @@ static uint8_t memory_read(uint32_t address)
 		return flash[address];
 	}
 	else if ((address >= SRAM_LOWER) && (address <= SRAM_UPPER)) {
+		// systick_millis_count
+		if (address == 0x1FFF8AE8) {
+			++systick_millis_count_reads;
+			if (systick_millis_count_reads == 1) {
+				return 0;
+			}
+			else if (systick_millis_count_reads == 2) {
+				return 4;
+			}
+			return 5;
+		}
 		return sram[address - SRAM_LOWER];
 	}
 	else if ((address >= 0x40000000) && (address <= 0x4007FFFF)) {
@@ -48,6 +60,9 @@ static uint8_t memory_read(uint32_t address)
 				return 0x0C;
 			}
 		}
+		return 0;
+	}
+	else if ((address >= 0xE0000000) && (address <= 0xFFFFFFFF)) {
 		return 0;
 	}
 	else {
@@ -77,7 +92,8 @@ static uint32_t memory_word_read(uint32_t address)
 	                 | (memory_read(address + 1) << 8)
 	                 | (memory_read(address + 2) << 16)
 	                 | (memory_read(address + 3) << 24);
-	printf("  > READ MemU[%08X,4] = %08X\n", address, data);
+	printf("  > READ (%s) MemU[%08X,4] = %08X\n",
+	       get_address_name(address), address, data);
 	return data;
 }
 
@@ -982,7 +998,7 @@ static void a6_7_42_t1(struct registers *registers,
 	uint32_t address = offset_addr;
 	printf("  LDR R%d [R%d, #%d]\n", rt, rn, imm32);
 
-	uint32_t data = memory_read_word(address);
+	uint32_t data = memory_word_read(address);
 	printf("  > R%d = %08X\n", rt, data);
 	registers->r[rt] = data;
 }
@@ -2284,7 +2300,7 @@ void teensy_3_2_emulate(uint8_t *data, uint32_t length) {
 	}
 
 	printf("\nExecution:\n");
-	for (int i = 0; i < 3564; ++i){
+	for (int i = 0; i < 3599; ++i){
 		step(&registers);
 	}
 }
