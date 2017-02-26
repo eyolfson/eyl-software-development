@@ -847,10 +847,13 @@ static void a6_7_12_t2(struct registers *registers, uint16_t halfword)
 	uint16_t imm11 = (halfword & 0x07FF) >> 0;
 	uint32_t imm32 = imm11 << 1;
 
+
+	if ((imm32 & (1 << 11)) == (1 << 11)) {
+		imm32 |= 0xFFFFF000;
+	}
+
 	uint32_t address = PC(registers) + imm32;
 	printf("  B%s label_%08X\n", get_condition_field(registers), address);
-
-	assert(((imm32 & (1 << 11)) != (1 << 11)) && "TODO: SignExtend");
 
 	B(registers, imm32);
 }
@@ -2300,7 +2303,7 @@ void teensy_3_2_emulate(uint8_t *data, uint32_t length) {
 	}
 
 	printf("\nExecution:\n");
-	for (int i = 0; i < 3599; ++i){
+	for (int i = 0; i < 3607; ++i){
 		step(&registers);
 	}
 }
