@@ -37,6 +37,15 @@ static uint8_t memory_read(uint32_t address)
 			else if (systick_millis_count_reads == 2) {
 				return 4;
 			}
+			else if (systick_millis_count_reads == 3) {
+				return 4;
+			}
+			else if (systick_millis_count_reads == 4) {
+				return 4;
+			}
+			else if (systick_millis_count_reads == 5) {
+				return 4;
+			}
 			return 5;
 		}
 		return sram[address - SRAM_LOWER];
@@ -1583,14 +1592,49 @@ static void a6_7_132_t2(struct registers *registers,
 
 	uint32_t imm32 = imm8;
 
-	printf("  SUB R%d, R%d, #%d\n", d, n, imm32);
+	bool setflags = !InITBlock(registers);
+
+	if (setflags) {
+		printf("  SUBS R%d, R%d, #%d\n", d, n, imm32);
+	}
+	else {
+		printf("  SUB R%d, R%d, #%d\n", d, n, imm32);
+	}
 
 	struct AddWithCarry_Result R =
 		AddWithCarry(registers->r[n], ~imm32, true);
 
-	// TODO: setflags
 	registers->r[d] = R.result;
 	printf("  > R%d = %08X\n", d, registers->r[d]);
+
+	if (setflags) {
+			if ((R.result & 0x80000000) == 0x80000000) {
+				APSR_N_set(registers);
+			}
+			else {
+				APSR_N_clear(registers);
+			}
+			if (R.result == 0) {
+				APSR_Z_set(registers);
+			}
+			else {
+				APSR_Z_clear(registers);
+			}
+			if (R.carry_out) {
+				APSR_C_set(registers);
+			}
+			else {
+				APSR_C_clear(registers);
+			}
+			if (R.overflow) {
+				APSR_V_set(registers);
+			}
+			else {
+				APSR_V_clear(registers);
+			}
+			printf("  > APSR = %08X\n", registers->apsr);
+
+	}
 }
 
 static void a6_7_133_t1(struct registers *registers,
@@ -2303,7 +2347,7 @@ void teensy_3_2_emulate(uint8_t *data, uint32_t length) {
 	}
 
 	printf("\nExecution:\n");
-	for (int i = 0; i < 3607; ++i){
+	for (int i = 0; i < 3684; ++i){
 		step(&registers);
 	}
 }
