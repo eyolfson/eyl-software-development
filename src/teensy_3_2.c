@@ -867,6 +867,32 @@ static void a6_7_12_t2(struct registers *registers, uint16_t halfword)
 	B(registers, imm32);
 }
 
+static void a6_7_12_t4(struct registers *registers,
+                       uint16_t first_halfword,
+                       uint16_t second_halfword)
+{
+	uint8_t S = (first_halfword & 0x0400) >> 10;
+	uint16_t imm10 = (first_halfword & 0x03FF) >> 0;
+	uint8_t J1 = (second_halfword & 0x2000) >> 13;
+	uint8_t J2 = (second_halfword & 0x0800) >> 11;
+	uint16_t imm11 = (second_halfword & 0x07FF) >> 0;
+
+	uint8_t I1 = (~(J1 ^ S)) & 1;
+	uint8_t I2 = (~(J2 ^ S)) & 1;
+	uint32_t imm32 = (I1 * 0x800000)
+	                 + (I2 * 0x400000)
+	                 + (imm10 * 0x1000)
+	                 + (imm11 * 0x2);
+	if (S == 1) {
+		imm32 |= 0xFF000000;
+	}
+
+	uint32_t address = PC(registers) + imm32;
+	printf("  B%s label_%08X\n", get_condition_field(registers), address);
+
+	B(registers, imm32);
+}
+
 static void a6_7_18_t1(struct registers *registers,
                        uint16_t first_halfword,
                        uint16_t second_halfword)
@@ -1290,6 +1316,30 @@ static void a6_7_87_t1(struct registers *registers, uint16_t halfword)
 	printf("  NOP\n");
 }
 
+static void POP(struct registers *registers,
+                uint16_t all_registers)
+{
+	if (ConditionPassed(registers)) {
+		uint32_t address = SP(registers);
+		for (uint8_t i = 0; i < 15; ++i) {
+			if ((all_registers & (0x0001 << i)) == (0x0001 << i)) {
+				registers->r[i] = memory_word_read(address);
+				printf("  > R%d = %08X (MemA[%08X, 4])\n",
+				       i, registers->r[i], address);
+				address += 4;
+			}
+		}
+		if ((all_registers & (0x0001 << 15)) == (0x0001 << 15)) {
+			uint32_t arg = memory_word_read(address);
+			LoadWritePC(registers, arg);
+		}
+		uint8_t bit_count = __builtin_popcount(all_registers);
+		address = registers->r[13] + 4 * bit_count;
+		registers->r[13] = address;
+		printf("  > R13 = %08X\n", address);
+	}
+}
+
 static void a6_7_97_t1(struct registers *registers,
                        uint16_t halfword)
 {
@@ -1314,24 +1364,40 @@ static void a6_7_97_t1(struct registers *registers,
 	}
 	printf("}\n");
 
-	uint32_t address = SP(registers);
+	POP(registers, all_registers);
+}
 
-	for (uint8_t i = 0; i < 15; ++i) {
+static void a6_7_97_t2(struct registers *registers,
+                       uint16_t first_halfword,
+                       uint16_t second_halfword)
+{
+	uint8_t P = (second_halfword & 0x8000) >> 15;
+	uint8_t M = (second_halfword & 0x4000) >> 14;
+	uint8_t register_list = (second_halfword & 0x1FFF) >> 0;
+
+	uint16_t all_registers = (P << 15) | (M << 14) | register_list;
+
+	printf("  POP.W {");
+	bool first = false;
+	for (uint8_t i = 0; i < 16; ++i) {
 		if ((all_registers & (0x0001 << i)) == (0x0001 << i)) {
-			registers->r[i] = memory_word_read(address);
-			printf("  > R%d = %08X (MemA[%08X, 4])\n",
-			       i, registers->r[i], address);
-			address += 4;
+			if (!first) {
+				first = true;
+			}
+			else {
+				printf(", ");
+			}
+			printf("R%d", i);
 		}
 	}
-	if ((all_registers & (0x0001 << 15)) == (0x0001 << 15)) {
-		uint32_t arg = memory_word_read(address);
-		LoadWritePC(registers, arg);
+	printf("}\n");
+
+	uint8_t bit_count = __builtin_popcount(all_registers);
+	if ((bit_count < 2) || ((P == 1) && (M == 1))) {
+		assert(false);
 	}
 
-	address = registers->r[13] + 4 * bit_count;
-	registers->r[13] = address;
-	printf("  > R13 = %08X\n", address);
+	POP(registers, all_registers);
 }
 
 static void a6_7_98_t1(struct registers *registers,
@@ -2149,8 +2215,65 @@ static void a5_3_4(struct registers *registers,
 	uint8_t op1 = (first_halfword & 0x07F0) >> 4;
 	uint8_t op2 = (second_halfword & 0x7000) >> 12;
 
-	if ((op2 & 0x05) == 0x05) {
-		a6_7_18_t1(registers, first_halfword, second_halfword);
+	if (((op2 & 0b101) == 0b000) && !((op1 & 0b0111000) == 0b0111000)) {
+		printf("B a5_3_4\n");
+	}
+	else if (((op2 & 0b101) == 0b000) && ((op1 & 0b1111110) == 0b0111000)) {
+		printf("MSR a5_3_4\n");
+	}
+	else if (((op2 & 0b101) == 0b000) && (op1 == 0b0111010)) {
+		printf("Hint a5_3_4\n");
+	}
+	else if (((op2 & 0b101) == 0b000) && (op1 == 0b0111011)) {
+		printf("Misc a5_3_4\n");
+	}
+	else if (((op2 & 0b101) == 0b000) && ((op1 & 0b1111110) == 0b0111110)) {
+		printf("MSR a5_3_4\n");
+	}
+	else if ((op2  == 0b010) && (op1 == 0b1111111)) {
+		assert(false);
+	}
+	else if ((op2 & 0b101) == 0b001) {
+		a6_7_12_t4(registers, first_halfword, second_halfword); // B
+	}
+	else if ((op2 & 0b101) == 0b101) {
+		a6_7_18_t1(registers, first_halfword, second_halfword); // BL
+	}
+	else {
+		assert(false);
+	}
+}
+
+static void a5_3_5(struct registers *registers,
+                   uint16_t first_halfword,
+                   uint16_t second_halfword)
+{
+	uint8_t op = (first_halfword & 0x0180) >> 7;
+	uint8_t W = (first_halfword & 0x0020) >> 5;
+	uint8_t L = (first_halfword & 0x0010) >> 4;
+	uint8_t Rn = (first_halfword & 0x000F) >> 0;
+
+	if (op == 0b01) {
+		if (L == 0) {
+			printf("TODO: a5_3_5\n");
+			assert(false);
+		}
+		else if (L == 1) {
+			if (!((W == 1) && (Rn == 0b1101))) {
+				printf("okay\n");
+			}
+			else {
+				a6_7_97_t2(registers, first_halfword,
+				           second_halfword); // POP
+			}
+		}
+	}
+	else if (op == 0b10) {
+		printf("TODO: a5_3_5\n");
+		assert(false);
+	}
+	else {
+		assert(false);
 	}
 }
 
@@ -2249,6 +2372,13 @@ static void a5_3(struct registers *registers,
 	uint8_t op = (second_halfword & 0x8000) >> 15;
 
 	if (op1 == 0b01) {
+		if ((op2 & 0b1100100) == 0b0000000) {
+			a5_3_5(registers, first_halfword, second_halfword);
+		}
+		else {
+			printf("TODO: a5_3\n");
+			assert(false);
+		}
 	}
 	else if (op1 == 0b10) {
 		if (((op2 & 0b0100000) == 0b0000000)
@@ -2347,7 +2477,7 @@ void teensy_3_2_emulate(uint8_t *data, uint32_t length) {
 	}
 
 	printf("\nExecution:\n");
-	for (int i = 0; i < 3684; ++i){
+	for (int i = 0; i < 3693; ++i){
 		step(&registers);
 	}
 }
