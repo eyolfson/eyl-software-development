@@ -9,6 +9,72 @@ const char *get_address_name(uint32_t address)
 	}
 
 	switch (address) {
+	case 0x40020000:
+		name = "FTFL_FSTAT";
+		break;
+	case 0x40020001:
+		name = "FTFL_FCNFG";
+		break;
+	case 0x40020002:
+		name = "FTFL_FSEC";
+		break;
+	case 0x40020003:
+		name = "FTFL_FOPT";
+		break;
+	case 0x40020004:
+		name = "FTFL_FCCOB3";
+		break;
+	case 0x40020005:
+		name = "FTFL_FCCOB2";
+		break;
+	case 0x40020006:
+		name = "FTFL_FCCOB1";
+		break;
+	case 0x40020007:
+		name = "FTFL_FCCOB0";
+		break;
+	case 0x40020008:
+		name = "FTFL_FCCOB7";
+		break;
+	case 0x40020009:
+		name = "FTFL_FCCOB6";
+		break;
+	case 0x4002000A:
+		name = "FTFL_FCCOB5";
+		break;
+	case 0x4002000B:
+		name = "FTFL_FCCOB4";
+		break;
+	case 0x4002000C:
+		name = "FTFL_FCCOBB";
+		break;
+	case 0x4002000D:
+		name = "FTFL_FCCOBA";
+		break;
+	case 0x4002000E:
+		name = "FTFL_FCCOB9";
+		break;
+	case 0x4002000F:
+		name = "FTFL_FCCOB8";
+		break;
+	case 0x40020010:
+		name = "FTFL_FPROT3";
+		break;
+	case 0x40020011:
+		name = "FTFL_FPROT2";
+		break;
+	case 0x40020012:
+		name = "FTFL_FPROT1";
+		break;
+	case 0x40020013:
+		name = "FTFL_FPROT0";
+		break;
+	case 0x40020016:
+		name = "FTFL_FEPROT";
+		break;
+	case 0x40020017:
+		name = "FTFL_FDPROT";
+		break;
 	case 0x40038000:
 		name = "FTM0_SC";
 		break;

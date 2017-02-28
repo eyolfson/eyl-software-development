@@ -51,7 +51,10 @@ static uint8_t memory_read(uint32_t address)
 		return sram[address - SRAM_LOWER];
 	}
 	else if ((address >= 0x40000000) && (address <= 0x4007FFFF)) {
-		if (address == 0x40064006) {
+		if (address == 0x40020000) {
+			return 0x80;
+		}
+		else if (address == 0x40064006) {
 			++MCG_S_reads;
 			if (MCG_S_reads == 1) {
 				return 0x02;
@@ -135,12 +138,12 @@ struct registers {
 	uint32_t faultmask;
 	uint8_t itstate;
 };
-
+/*
 struct ThumbExpandImm_C_Result {
 	uint32_t imm32;
 	bool carry;
 };
-
+*/
 struct AddWithCarry_Result {
 	uint32_t result;
 	bool carry_out;
@@ -157,6 +160,49 @@ enum SRType {
 };
 
 static bool is_branch;
+
+struct ResultCarryTuple {
+	uint32_t result;
+	bool carry;
+};
+
+struct ResultCarryOverflowTuple {
+	uint32_t result;
+	bool carry;
+	bool overflow;
+};
+
+static struct ResultCarryTuple LSL_C(uint32_t x, uint8_t shift)
+{
+	assert(shift > 0);
+	uint64_t extended_x = x;
+	extended_x <<= shift;
+	struct ResultCarryTuple T;
+	T.result = (extended_x & 0xFFFFFFFF);
+	T.carry = (extended_x & 0x100000000);
+	return T;
+}
+
+static struct ResultCarryTuple Shift_C(uint32_t value, enum SRType type,
+                                       uint8_t amount, bool carry_in)
+{
+	struct ResultCarryTuple T;
+	if (amount == 0) {
+		T.result = value;
+		T.carry = carry_in;
+	}
+	else {
+		switch (type) {
+		case SRType_LSL:
+			T = LSL_C(value, amount);
+			break;
+		default:
+			assert(false);
+		}
+	}
+
+	return T;
+}
 
 uint8_t APSR_N(struct registers *registers)
 {
@@ -221,6 +267,29 @@ void APSR_C_clear(struct registers *registers)
 void APSR_V_clear(struct registers *registers)
 {
 	registers->apsr &= ~0x10000000;
+}
+
+void setflags_ResultCarryTuple(struct registers *registers,
+                               struct ResultCarryTuple T)
+{
+	if ((T.result & 0x80000000) == 0x80000000) {
+		APSR_N_set(registers);
+	}
+	else {
+		APSR_N_clear(registers);
+	}
+	if (T.result == 0) {
+		APSR_Z_set(registers);
+	}
+	else {
+		APSR_Z_clear(registers);
+	}
+	if (T.carry) {
+		APSR_C_set(registers);
+	}
+	else {
+		APSR_C_clear(registers);
+	}
 }
 
 struct AddWithCarry_Result AddWithCarry(uint32_t x, uint32_t y, bool carry_in)
@@ -352,14 +421,14 @@ uint32_t Align_PC_4(struct registers *registers)
 	return PC(registers) & 0xFFFFFFFC;
 }
 
-struct ThumbExpandImm_C_Result ThumbExpandImm_C(uint16_t imm12, bool carry) {
-	struct ThumbExpandImm_C_Result result;
+struct ResultCarryTuple ThumbExpandImm_C(uint16_t imm12, bool carry) {
+	struct ResultCarryTuple T;
 
 	if ((imm12 & 0xC00) == 0x000) {
 		uint8_t switch_value = (imm12 & 0x300) >> 8;
 		switch (switch_value) {
 		case 0b00:
-			result.imm32 = (imm12 & 0x0FF);
+			T.result = (imm12 & 0x0FF);
 			break;
 		case 0b01:
 			assert(false);
@@ -371,23 +440,23 @@ struct ThumbExpandImm_C_Result ThumbExpandImm_C(uint16_t imm12, bool carry) {
 			assert(false);
 			break;
 		}
-		result.carry = carry;
+		T.carry = carry;
 	}
 	else {
 		uint8_t rotate = (imm12 & 0xF80) >> 7;
 		uint32_t unrotated_value = 0x80 + (imm12 & 0x7F);
 		uint32_t value = unrotated_value << (32 - rotate);
-		result.imm32 = value;
-		result.carry = false;
+		T.result = value;
+		T.carry = false;
 	}
 
-	return result;
+	return T;
 }
 
 uint32_t ThumbExpandImm(struct registers *registers,
                         uint16_t imm12)
 {
-	return ThumbExpandImm_C(imm12, APSR_C(registers)).imm32;
+	return ThumbExpandImm_C(imm12, APSR_C(registers)).result;
 }
 
 static const char *get_condition_name(uint8_t cond)
@@ -680,15 +749,15 @@ static void a6_7_3_t3(struct registers *registers,
 	                 + imm8;
 
 	bool setflags = S == 1;
-	struct ThumbExpandImm_C_Result TR = ThumbExpandImm_C(imm12, false);
+	struct ResultCarryTuple T = ThumbExpandImm_C(imm12, false);
 
 	printf("  ADD");
 	if (setflags) {
 		printf("S");
 	}
-	printf(".W R%d, R%d, #%d\n", d, n, TR.imm32);
+	printf(".W R%d, R%d, #%d\n", d, n, T.result);
 
-	struct AddWithCarry_Result AR = AddWithCarry(registers->r[n], TR.imm32,
+	struct AddWithCarry_Result AR = AddWithCarry(registers->r[n], T.result,
 	                                             false);
 	registers->r[d] = AR.result;
 	printf("  > R%d = %08X\n", d, registers->r[d]);
@@ -765,19 +834,19 @@ static void a6_7_8_t1(struct registers *registers,
 	uint16_t imm12 = (i * 0x800)
 	                 + (imm3 * 0x100)
 	                 + imm8;
-	struct ThumbExpandImm_C_Result R = ThumbExpandImm_C(imm12, APSR_C(registers));
+	struct ResultCarryTuple T = ThumbExpandImm_C(imm12, APSR_C(registers));
 
 	if (setflags) {
 		printf("  ANDS%s R%d, R%d, #0x%08X\n",
-		       get_condition_field(registers), d, n, R.imm32);
+		       get_condition_field(registers), d, n, T.result);
 	}
 	else {
 		printf("  AND%s R%d, R%d, #0x%08X\n",
-		        get_condition_field(registers), d, n, R.imm32);
+		        get_condition_field(registers), d, n, T.result);
 	}
 
 	if (ConditionPassed(registers)) {
-		int32_t result = registers->r[n] & R.imm32;
+		int32_t result = registers->r[n] & T.result;
 		registers->r[d] = result;
 		printf("  > R%d = %08X\n", d, registers->r[d]);
 		if (setflags) {
@@ -793,7 +862,7 @@ static void a6_7_8_t1(struct registers *registers,
 			else {
 				APSR_Z_clear(registers);
 			}
-			if (R.carry) {
+			if (T.carry) {
 				APSR_C_set(registers);
 			}
 			else {
@@ -1150,11 +1219,21 @@ static void a6_7_67_t1(struct registers *registers,
 	uint8_t m = (halfword & 0x0038) >> 3;
 	uint8_t d = (halfword & 0x0007) >> 0;
 
+	bool setflags = !InITBlock(registers);
+
 	assert(imm5 != 0b00000);
 	printf("  LSL R%d, R%d, #%d\n", d, m, imm5);
-	// TODO
-	registers->r[d] = registers->r[m] << imm5;
+
+	struct ResultCarryTuple T;
+	T = Shift_C(registers->r[m], SRType_LSL, imm5, APSR_C(registers));
+
+	registers->r[d] = T.result;
 	printf("  > R%d = %08X\n", d, registers->r[d]);
+
+	if (setflags) {
+		setflags_ResultCarryTuple(registers, T);
+		printf("  > APSR = %08X\n", registers->apsr);
+	}
 }
 
 static void a6_7_73_t1(struct registers *registers,
@@ -1244,10 +1323,10 @@ static void a6_7_75_t2(struct registers *registers,
 	                 + (imm3 * 0x100)
 	                 + imm8;
 
-	struct ThumbExpandImm_C_Result result = ThumbExpandImm_C(imm12, false);
-	registers->r[rd] = result.imm32;
-	printf("  MOV.W R%d #0x%08X\n", rd, result.imm32);
-	printf("  > R%d = %08X\n", rd, result.imm32);
+	struct ResultCarryTuple T = ThumbExpandImm_C(imm12, false);
+	registers->r[rd] = T.result;
+	printf("  MOV.W R%d #0x%08X\n", rd, T.result);
+	printf("  > R%d = %08X\n", rd, T.result);
 }
 
 static void a6_7_75_t3(struct registers *registers,
@@ -2477,7 +2556,7 @@ void teensy_3_2_emulate(uint8_t *data, uint32_t length) {
 	}
 
 	printf("\nExecution:\n");
-	for (int i = 0; i < 3693; ++i){
+	for (int i = 0; i < 3705; ++i){
 		step(&registers);
 	}
 }
