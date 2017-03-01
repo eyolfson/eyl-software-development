@@ -138,12 +138,7 @@ struct registers {
 	uint32_t faultmask;
 	uint8_t itstate;
 };
-/*
-struct ThumbExpandImm_C_Result {
-	uint32_t imm32;
-	bool carry;
-};
-*/
+
 struct AddWithCarry_Result {
 	uint32_t result;
 	bool carry_out;
@@ -272,29 +267,35 @@ void APSR_V_clear(struct registers *registers)
 void setflags_ResultCarryTuple(struct registers *registers,
                                struct ResultCarryTuple T)
 {
-	if ((T.result & 0x80000000) == 0x80000000) {
-		APSR_N_set(registers);
-	}
-	else {
-		APSR_N_clear(registers);
-	}
-	if (T.result == 0) {
-		APSR_Z_set(registers);
-	}
-	else {
-		APSR_Z_clear(registers);
-	}
-	if (T.carry) {
-		APSR_C_set(registers);
-	}
-	else {
-		APSR_C_clear(registers);
-	}
+	if ((T.result & 0x80000000) == 0x80000000) { APSR_N_set(registers); }
+	else                                       { APSR_N_clear(registers); }
+
+	if (T.result == 0) { APSR_Z_set(registers); }
+	else               { APSR_Z_clear(registers); }
+
+	if (T.carry) { APSR_C_set(registers); }
+	else         { APSR_C_clear(registers); }
 }
 
-struct AddWithCarry_Result AddWithCarry(uint32_t x, uint32_t y, bool carry_in)
+void setflags_ResultCarryOverflowTuple(struct registers *registers,
+                                       struct ResultCarryOverflowTuple T)
 {
-	struct AddWithCarry_Result R;
+	if ((T.result & 0x80000000) == 0x80000000) { APSR_N_set(registers); }
+	else                                       { APSR_N_clear(registers); }
+
+	if (T.result == 0) { APSR_Z_set(registers); }
+	else               { APSR_Z_clear(registers); }
+
+	if (T.carry) { APSR_C_set(registers); }
+	else         { APSR_C_clear(registers); }
+
+	if (T.overflow) { APSR_V_set(registers); }
+	else            { APSR_V_clear(registers); }
+}
+
+struct ResultCarryOverflowTuple AddWithCarry(uint32_t x, uint32_t y, bool carry_in)
+{
+	struct ResultCarryOverflowTuple T;
 
 
 	uint64_t unsigned_sum = ((uint64_t) x) + ((uint64_t) y);
@@ -303,19 +304,19 @@ struct AddWithCarry_Result AddWithCarry(uint32_t x, uint32_t y, bool carry_in)
 	int64_t signed_sum = ((int32_t) x) + ((int32_t) y);
 	if (carry_in) signed_sum += 1;
 
-	R.result = (unsigned_sum & 0xFFFFFFFF);
+	T.result = (unsigned_sum & 0xFFFFFFFF);
 
-	if (((uint64_t) R.result) == unsigned_sum)
-		R.carry_out = false;
+	if (((uint64_t) T.result) == unsigned_sum)
+		T.carry = false;
 	else
-		R.carry_out = true;
+		T.carry = true;
 
-	if (((int64_t) ((int32_t) R.result)) == signed_sum)
-		R.overflow = false;
+	if (((int64_t) ((int32_t) T.result)) == signed_sum)
+		T.overflow = false;
 	else
-		R.overflow = true;
+		T.overflow = true;
 
-	return R;
+	return T;
 }
 
 void ITAdvance(struct registers *registers)
@@ -720,7 +721,7 @@ static void a6_7_3_t2(struct registers *registers, uint16_t halfword)
 
 	uint32_t imm32 = imm8;
 
-	struct AddWithCarry_Result R =
+	struct ResultCarryOverflowTuple R =
 		AddWithCarry(registers->r[n], imm32, false);
 
 	printf("  ADD");
@@ -757,7 +758,7 @@ static void a6_7_3_t3(struct registers *registers,
 	}
 	printf(".W R%d, R%d, #%d\n", d, n, T.result);
 
-	struct AddWithCarry_Result AR = AddWithCarry(registers->r[n], T.result,
+	struct ResultCarryOverflowTuple AR = AddWithCarry(registers->r[n], T.result,
 	                                             false);
 	registers->r[d] = AR.result;
 	printf("  > R%d = %08X\n", d, registers->r[d]);
@@ -779,40 +780,44 @@ static void a6_7_4_t1(struct registers *registers, uint16_t halfword)
 	}
 
 	uint32_t shifted = registers->r[m];
-	struct AddWithCarry_Result R = AddWithCarry(registers->r[n],
-	                                            shifted, false);
+	struct ResultCarryOverflowTuple T = AddWithCarry(registers->r[n],
+	                                                 shifted, false);
 
 	assert(d != 15);
 
-	registers->r[d] = R.result;
+	registers->r[d] = T.result;
 	printf("  > R%d = %08X\n", d, registers->r[d]);
 	if (setflags) {
-			if ((R.result & 0x80000000) == 0x80000000) {
-				APSR_N_set(registers);
-			}
-			else {
-				APSR_N_clear(registers);
-			}
-			if (R.result == 0) {
-				APSR_Z_set(registers);
-			}
-			else {
-				APSR_Z_clear(registers);
-			}
-			if (R.carry_out) {
-				APSR_C_set(registers);
-			}
-			else {
-				APSR_C_clear(registers);
-			}
-			if (R.overflow) {
-				APSR_V_set(registers);
-			}
-			else {
-				APSR_V_clear(registers);
-			}
+			setflags_ResultCarryOverflowTuple(registers, T);
 			printf("  > APSR = %08X\n", registers->apsr);
 	}
+}
+
+static void ADD_SP_plus_immediate(struct registers *registers,
+                                  uint8_t d, uint32_t imm32, bool setflags)
+{
+	if (ConditionPassed(registers)) {
+		struct ResultCarryOverflowTuple T;
+		T = AddWithCarry(SP(registers), imm32, false);
+		registers->r[d] = T.result;
+		printf("  R%d = %08X\n", d, registers->r[d]);
+		if (setflags) {
+			setflags_ResultCarryOverflowTuple(registers, T);
+		}
+	}
+}
+
+static void a6_7_5_t1(struct registers *registers, uint16_t halfword)
+{
+	uint8_t d = (halfword & 0x0700) >> 8;
+	uint8_t imm8 = (halfword & 0x00FF) >> 0;
+	bool setflags = false;
+
+	uint32_t imm32 = imm8 << 2;
+
+	printf("  ADD%s R%d,SP,#%d\n", get_condition_field(registers), d, imm32);
+
+	ADD_SP_plus_immediate(registers, d, imm32, setflags);
 }
 
 static void a6_7_8_t1(struct registers *registers,
@@ -1036,16 +1041,16 @@ static void a6_7_21_t1(struct registers *registers,
 
 static void CMP(struct registers *registers, uint8_t n, uint32_t imm32)
 {
-	struct AddWithCarry_Result R = AddWithCarry(registers->r[n],
-	                                            ~imm32, true);
-	uint32_t new_apsr = (R.result & 0x80000000);
-	if (R.result == 0) {
+	struct ResultCarryOverflowTuple T = AddWithCarry(registers->r[n],
+	                                                 ~imm32, true);
+	uint32_t new_apsr = (T.result & 0x80000000);
+	if (T.result == 0) {
 		new_apsr |= 0x40000000;
 	}
-	if (R.carry_out) {
+	if (T.carry) {
 		new_apsr |= 0x20000000;
 	}
-	if (R.overflow) {
+	if (T.overflow) {
 		new_apsr |= 0x10000000;
 	}
 	registers->apsr &= ~(0xF0000000);
@@ -1248,6 +1253,22 @@ static void a6_7_73_t1(struct registers *registers,
 	uint64_t result = registers->r[n] * registers->r[m] + registers->r[a];
 
 	printf("  MLA R%d, R%d, R%d, R%d\n", d, n, m, a);
+	registers->r[d] = (result & 0xFFFFFFFF);
+	printf("  > R%d = %08X\n", d, registers->r[d]);
+}
+
+static void a6_7_74_t1(struct registers *registers,
+                       uint16_t first_halfword,
+                       uint16_t second_halfword)
+{
+	uint8_t n = (first_halfword & 0x000F) >> 0;
+	uint8_t a = (second_halfword & 0xF000) >> 12;
+	uint8_t d = (second_halfword & 0x0F00) >> 8;
+	uint8_t m = (second_halfword & 0x000F) >> 0;
+
+	uint64_t result = registers->r[a] - registers->r[n] * registers->r[m];
+
+	printf("  MLS R%d, R%d, R%d, R%d\n", d, n, m, a);
 	registers->r[d] = (result & 0xFFFFFFFF);
 	printf("  > R%d = %08X\n", d, registers->r[d]);
 }
@@ -1533,7 +1554,7 @@ static void a6_7_106_t2(struct registers *registers,
 	bool setflags = S == 1;
 	uint32_t imm32 = ThumbExpandImm(registers, imm12);
 
-	struct AddWithCarry_Result R =
+	struct ResultCarryOverflowTuple R =
 		AddWithCarry(~(registers->r[n]), imm32, true);
 
 	printf("  RSB");
@@ -1746,32 +1767,32 @@ static void a6_7_132_t2(struct registers *registers,
 		printf("  SUB R%d, R%d, #%d\n", d, n, imm32);
 	}
 
-	struct AddWithCarry_Result R =
+	struct ResultCarryOverflowTuple T =
 		AddWithCarry(registers->r[n], ~imm32, true);
 
-	registers->r[d] = R.result;
+	registers->r[d] = T.result;
 	printf("  > R%d = %08X\n", d, registers->r[d]);
 
 	if (setflags) {
-			if ((R.result & 0x80000000) == 0x80000000) {
+			if ((T.result & 0x80000000) == 0x80000000) {
 				APSR_N_set(registers);
 			}
 			else {
 				APSR_N_clear(registers);
 			}
-			if (R.result == 0) {
+			if (T.result == 0) {
 				APSR_Z_set(registers);
 			}
 			else {
 				APSR_Z_clear(registers);
 			}
-			if (R.carry_out) {
+			if (T.carry) {
 				APSR_C_set(registers);
 			}
 			else {
 				APSR_C_clear(registers);
 			}
-			if (R.overflow) {
+			if (T.overflow) {
 				APSR_V_set(registers);
 			}
 			else {
@@ -1792,7 +1813,7 @@ static void a6_7_133_t1(struct registers *registers,
 	printf("  SUB R%d, R%d, R%d\n", d, n, m);
 
 	uint32_t shifted = registers->r[m];
-	struct AddWithCarry_Result R =
+	struct ResultCarryOverflowTuple R =
 		AddWithCarry(registers->r[n], ~shifted, true);
 
 	// TODO: setflags
@@ -2168,7 +2189,7 @@ static void a5_2(struct registers *registers, uint16_t halfword)
 		printf("  ADR? a5_2\n");
 	}
 	else if ((opcode & 0b111110) == 0b101010) {
-		printf("  ADD? a5_2\n");
+		a6_7_5_t1(registers, halfword); // ADD
 	}
 	else if ((opcode & 0b111100) == 0b101100) {
 		a5_2_5(registers, halfword);
@@ -2395,7 +2416,7 @@ static void a5_3_14(struct registers *registers,
 		}
 	}
 	else if (op2 == 0b01) {
-		printf("  MLS a5_3_14\n");
+		a6_7_74_t1(registers, first_halfword, second_halfword); //MLS
 	}
 	else {
 		assert(false);
@@ -2543,7 +2564,7 @@ void teensy_3_2_emulate(uint8_t *data, uint32_t length) {
 	registers.apsr = 0; // Acutally unknown value
 
 	/* R15 (Program Counter):
-     EPSR (Execution Program Status Register): bit 24 is the Thumb bit */
+	   EPSR (Execution Program Status Register): bit 24 is the Thumb bit */
 	const uint8_t EPSR_T_BIT = 24;
 
 	registers.itstate = 0;
@@ -2556,7 +2577,7 @@ void teensy_3_2_emulate(uint8_t *data, uint32_t length) {
 	}
 
 	printf("\nExecution:\n");
-	for (int i = 0; i < 3705; ++i){
+	for (int i = 0; i < 3719; ++i){
 		step(&registers);
 	}
 }
