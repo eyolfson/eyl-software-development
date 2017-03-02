@@ -120,6 +120,13 @@ static void memory_write(uint32_t address, uint8_t data)
 	}
 }
 
+static uint32_t memory_byte_write(uint32_t address, uint8_t data)
+{
+	printf("  > MemU[%08X,1] (%s) = %02X\n",
+	       address, get_address_name(address), data);
+	memory_write(address, data);
+}
+
 static uint32_t memory_word_write(uint32_t address, uint32_t data)
 {
 	printf("  > MemU[%08X,4] = %08X\n", address, data);
@@ -1730,6 +1737,39 @@ static void a6_7_121_t3(struct registers *registers,
 	STRB(registers, t, n, imm32, index, add, wback);
 }
 
+static void STRB_register(struct registers *registers,
+                          uint8_t t, uint8_t n, uint8_t m,
+                          bool index, bool add, bool wback,
+                          enum SRType shift_t, uint8_t shift_n)
+{
+	assert(shift_t == SRType_LSL);
+	assert(shift_n == 0);
+
+	if (ConditionPassed(registers)) {
+		uint32_t offset = registers->r[m];
+		uint32_t address = registers->r[n] + offset;
+		memory_byte_write(address, registers->r[t]);
+	}
+}
+
+static void a6_7_122_t1(struct registers *registers,
+                        uint16_t halfword)
+{
+	uint8_t m = (halfword & 0x01C0) >> 6;
+	uint8_t n = (halfword & 0x0038) >> 3;
+	uint8_t t = (halfword & 0x0007) >> 0;
+
+	bool index = true;
+	bool add = true;
+	bool wback = false;
+	enum SRType shift_t = SRType_LSL;
+	uint8_t shift_n = 0;
+
+	printf("  STRB%s R%d, [R%d, R%d]\n",
+	       get_condition_field(registers), t, n, m);
+	STRB_register(registers, t, n, m, index, add, wback, shift_t, shift_n);
+}
+
 static void a6_7_128_t1(struct registers *registers,
                         uint16_t halfword)
 {
@@ -1993,7 +2033,7 @@ static void a5_2_4(struct registers *registers,
 			printf("  STRH? a5_2_4\n");
 			break;
 		case 0b010:
-			printf("  STRB? a5_2_4\n");
+			a6_7_122_t1(registers, halfword); // STRB
 			break;
 		case 0b011:
 			printf("  LDRSB? a5_2_4\n");
@@ -2577,7 +2617,7 @@ void teensy_3_2_emulate(uint8_t *data, uint32_t length) {
 	}
 
 	printf("\nExecution:\n");
-	for (int i = 0; i < 3719; ++i){
+	for (int i = 0; i < 3730; ++i){
 		step(&registers);
 	}
 }
