@@ -807,7 +807,7 @@ static void ADD_SP_plus_immediate(struct registers *registers,
 		struct ResultCarryOverflowTuple T;
 		T = AddWithCarry(SP(registers), imm32, false);
 		registers->r[d] = T.result;
-		printf("  R%d = %08X\n", d, registers->r[d]);
+		printf("  > R%d = %08X\n", d, registers->r[d]);
 		if (setflags) {
 			setflags_ResultCarryOverflowTuple(registers, T);
 		}
@@ -2617,7 +2617,7 @@ void teensy_3_2_emulate(uint8_t *data, uint32_t length) {
 	}
 
 	printf("\nExecution:\n");
-	for (int i = 0; i < 3730; ++i){
+	for (int i = 0; i < 3733; ++i){
 		step(&registers);
 	}
 }
