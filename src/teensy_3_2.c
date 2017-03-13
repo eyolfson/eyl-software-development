@@ -163,6 +163,11 @@ enum SRType {
 
 static bool is_branch;
 
+struct ShiftTNTuple {
+	enum SRType shift_t;
+	uint8_t shift_n;
+};
+
 struct ResultCarryTuple {
 	uint32_t result;
 	bool carry;
@@ -204,6 +209,13 @@ static struct ResultCarryTuple Shift_C(uint32_t value, enum SRType type,
 	}
 
 	return T;
+}
+
+static uint32_t Shift(uint32_t value, enum SRType type,
+                      uint8_t amount, bool carry_in)
+{
+	struct ResultCarryTuple T = Shift_C(value, type, amount, carry_in);
+	return T.result;
 }
 
 uint8_t APSR_N(struct registers *registers)
@@ -427,6 +439,48 @@ uint32_t PC(struct registers *registers)
 uint32_t Align_PC_4(struct registers *registers)
 {
 	return PC(registers) & 0xFFFFFFFC;
+}
+
+struct ShiftTNTuple DecodeImmShift(uint8_t type, uint8_t imm5)
+{
+	struct ShiftTNTuple T;
+
+	switch (type) {
+	case 0b00:
+		T.shift_t = SRType_LSL;
+		T.shift_n = imm5;
+		break;
+	case 0b01:
+		T.shift_t = SRType_LSR;
+		if (imm5 == 0b00000) {
+			T.shift_n = 32;
+		}
+		else {
+			T.shift_n = imm5;;
+		}
+		break;
+	case 0b10:
+		T.shift_t = SRType_ASR;
+		if (imm5 == 0b00000) {
+			T.shift_n = 32;
+		}
+		else {
+			T.shift_n = imm5;;
+		}
+		break;
+	case 0b11:
+		if (imm5 == 0b00000) {
+			T.shift_t = SRType_RRX;
+			T.shift_n = 1;
+		}
+		else {
+			T.shift_t = SRType_ROR;
+			T.shift_n = imm5;
+		}
+		break;
+	}
+
+	return T;
 }
 
 struct ResultCarryTuple ThumbExpandImm_C(uint16_t imm12, bool carry) {
@@ -771,6 +825,43 @@ static void a6_7_3_t3(struct registers *registers,
 	printf("  > R%d = %08X\n", d, registers->r[d]);
 }
 
+static void ADD_register(struct registers *registers, bool is_wide,
+                         uint8_t d, uint8_t n, uint8_t m,
+                         bool setflags, enum SRType shift_t, uint8_t shift_n)
+{
+	printf("  ADD");
+	if (setflags) {
+		printf("S");
+	}
+	printf("%s", get_condition_field(registers));
+	if (is_wide) {
+		printf(".W");
+	}
+	printf(" R%d, R%d, R%d", d, n, m);
+	if (shift_n != 0) {
+		printf(", <shift>");
+	}
+	printf("\n");
+
+	if (ConditionPassed(registers)) {
+		uint32_t shifted = Shift(registers->r[m], shift_t,
+		                         shift_n, APSR_C(registers));
+		struct ResultCarryOverflowTuple T =
+			AddWithCarry(registers->r[n], shifted, false);
+		if (d == 15) {
+			assert(false); // TODO
+		}
+		else {
+			registers->r[d] = T.result;
+			printf("  > R%d = %08X\n", d, registers->r[d]);
+			if (setflags) {
+				setflags_ResultCarryOverflowTuple(registers, T);
+				printf("  > APSR = %08X\n", registers->apsr);
+			}
+		}
+	}
+}
+
 static void a6_7_4_t1(struct registers *registers, uint16_t halfword)
 {
 	uint8_t m = (halfword & 0x01C0) >> 6;
@@ -798,6 +889,26 @@ static void a6_7_4_t1(struct registers *registers, uint16_t halfword)
 			setflags_ResultCarryOverflowTuple(registers, T);
 			printf("  > APSR = %08X\n", registers->apsr);
 	}
+}
+
+static void a6_7_4_t3(struct registers *registers,
+                      uint16_t first_halfword,
+                      uint16_t second_halfword)
+{
+	uint8_t S = (first_halfword & 0x0010) >> 4;
+	uint8_t n = (first_halfword & 0x000F) >> 0;
+	uint8_t imm3 = (second_halfword & 0x7000) >> 12;
+	uint8_t d = (second_halfword & 0x0F00) >> 8;
+	uint8_t imm2 = (second_halfword & 0x00C0) >> 6;
+	uint8_t type = (second_halfword & 0x0030) >> 4;
+	uint8_t m = (second_halfword & 0x000F) >> 0;
+
+	bool setflags = S == 1;
+	uint8_t imm5 = (imm3 << 2) | imm2;
+	struct ShiftTNTuple T = DecodeImmShift(type, imm5);
+
+
+	ADD_register(registers, true, d, n, m, setflags, T.shift_t, T.shift_n);
 }
 
 static void ADD_SP_plus_immediate(struct registers *registers,
@@ -1222,6 +1333,56 @@ static void a6_7_45_t1(struct registers *registers,
 	uint32_t value = memory_byte_read(address);
 	registers->r[rt] = value;
 	printf("  > R%d = %08X\n", rt, value);
+}
+
+static void LDRB_register(struct registers *registers,
+                          uint8_t t, uint8_t n, uint8_t m,
+                          bool index, bool add, bool wback,
+                          enum SRType shift_t, uint8_t shift_n)
+{
+	assert(shift_t == SRType_LSL);
+	assert(shift_n == 0);
+
+	if (ConditionPassed(registers)) {
+		uint32_t offset = registers->r[m];
+		uint32_t offset_addr;
+		if (add) {
+			offset_addr = registers->r[n] + offset;
+		}
+		else {
+			offset_addr = registers->r[n] - offset;
+		}
+		uint32_t address;
+		if (index) {
+			address = offset_addr;
+		}
+		else {
+			address = registers->r[n];
+		}
+		uint32_t data = memory_byte_read(address); // ZeroExtend
+
+		registers->r[t] = data;
+		printf("  > R%d = %08X\n", t, registers->r[t]);
+	}
+}
+
+static void a6_7_47_t1(struct registers *registers,
+                       uint16_t halfword)
+{
+	uint8_t m = (halfword & 0x01C0) >> 6;
+	uint8_t n = (halfword & 0x0038) >> 3;
+	uint8_t t = (halfword & 0x0007) >> 0;
+
+	bool index = true;
+	bool add = true;
+	bool wback = false;
+
+	enum SRType shift_t = SRType_LSL;
+	uint8_t shift_n = 0;
+
+	printf("  LDRB%s R%d [R%d, R%d]\n",
+	       get_condition_field(registers), t, n, m);
+	LDRB_register(registers, t, n, m, index, add, wback, shift_t, shift_n);
 }
 
 static void a6_7_67_t1(struct registers *registers,
@@ -2045,7 +2206,7 @@ static void a5_2_4(struct registers *registers,
 			printf("  LDRH? a5_2_4\n");
 			break;
 		case 0b110:
-			printf("  LDRB? a5_2_4\n");
+			a6_7_47_t1(registers, halfword); // LDRB
 			break;
 		case 0b111:
 			printf("  LDRSH? a5_2_4\n");
@@ -2425,6 +2586,7 @@ static void a5_3_10(struct registers *registers,
 	uint8_t op2 = (second_halfword & 0x0FC0) >> 6;
 
 	if (op1 == 0b100) {
+		assert(false);
 	}
 	else if ((op1 == 0b000) && ((op2 & 0b100000) == 0b100000)) {
 		a6_7_121_t3(registers, first_halfword, second_halfword);
@@ -2434,6 +2596,58 @@ static void a5_3_10(struct registers *registers,
 	}
 	else if ((op1 == 0b010) && ((op2 & 0b100000) == 0b000000)) {
 		printf("STR a5_3_10\n");
+	}
+}
+
+static void a5_3_11(struct registers *registers,
+                    uint16_t first_halfword,
+                    uint16_t second_halfword)
+{
+	uint8_t op = (first_halfword & 0x01E0) >> 5;
+	uint8_t S = (first_halfword & 0x0010) >> 4;
+	uint8_t n = (first_halfword & 0x000F) >> 0;
+	uint8_t d = (second_halfword & 0x0F00) >> 8;
+
+	if (op == 0b0000) {
+		assert(false);
+	}
+	else if (op == 0b0001) {
+		assert(false);
+	}
+	else if (op == 0b0010) {
+		assert(false);
+	}
+	else if (op == 0b0011) {
+		assert(false);
+	}
+	else if (op == 0b0100) {
+		assert(false);
+	}
+	else if (op == 0b1000) {
+		if (d != 0b1111) {
+			a6_7_4_t3(registers, first_halfword,
+			          second_halfword); // ADD
+		}
+		else if (d == 0b1111) {
+			if (S == 0) {
+				assert(false);
+			}
+			else if (S == 1) {
+				assert(false);
+			}
+		}
+	}
+	else if (op == 0b1010) {
+		assert(false);
+	}
+	else if (op == 0b1011) {
+		assert(false);
+	}
+	else if (op == 0b1101) {
+		assert(false);
+	}
+	else if (op == 0b1110) {
+		assert(false);
 	}
 }
 
@@ -2515,8 +2729,16 @@ static void a5_3(struct registers *registers,
 		if ((op2 & 0b1100100) == 0b0000000) {
 			a5_3_5(registers, first_halfword, second_halfword);
 		}
-		else {
-			printf("TODO: a5_3\n");
+		else if ((op2 & 0b1100100) == 0b0000100) {
+			printf("Load/store dual or exclusive, table branch\n");
+			assert(false);
+		}
+		else if ((op2 & 0b1100000) == 0b0100000) {
+			// Data processing (shifted register)
+			a5_3_11(registers, first_halfword, second_halfword);
+		}
+		else if ((op2 & 0b1000000) == 0b1000000) {
+			printf("Coprocessor instructions\n");
 			assert(false);
 		}
 	}
@@ -2617,7 +2839,7 @@ void teensy_3_2_emulate(uint8_t *data, uint32_t length) {
 	}
 
 	printf("\nExecution:\n");
-	for (int i = 0; i < 3733; ++i){
+	for (int i = 0; i < 3735; ++i){
 		step(&registers);
 	}
 }
