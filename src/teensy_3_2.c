@@ -921,6 +921,7 @@ static void ADD_SP_plus_immediate(struct registers *registers,
 		printf("  > R%d = %08X\n", d, registers->r[d]);
 		if (setflags) {
 			setflags_ResultCarryOverflowTuple(registers, T);
+			printf("  > APSR = %08X\n", registers->apsr);
 		}
 	}
 }
@@ -933,7 +934,20 @@ static void a6_7_5_t1(struct registers *registers, uint16_t halfword)
 
 	uint32_t imm32 = imm8 << 2;
 
-	printf("  ADD%s R%d,SP,#%d\n", get_condition_field(registers), d, imm32);
+	printf("  ADD%s R%d, SP, #%d\n", get_condition_field(registers), d, imm8);
+
+	ADD_SP_plus_immediate(registers, d, imm32, setflags);
+}
+
+static void a6_7_5_t2(struct registers *registers, uint16_t halfword)
+{
+	uint8_t d = 13;
+	bool setflags = false;
+
+	uint8_t imm7 = (halfword & 0x007F) >> 0;
+	uint32_t imm32 = imm7 << 2;
+
+	printf("  ADD%s SP, SP, #%d\n", get_condition_field(registers), imm7);
 
 	ADD_SP_plus_immediate(registers, d, imm32, setflags);
 }
@@ -2251,8 +2265,7 @@ static void a5_2_5(struct registers *registers, uint16_t halfword)
 		b4_1_1_t1(registers, halfword); // CPS
 	}
 	else if ((opcode & 0b1111100) == 0b0000000) {
-		printf("  ADD? a5_2_5\n");
-		assert(false);
+		a6_7_5_t2(registers, halfword); // ADD
 	}
 	else if ((opcode & 0b1111100) == 0b0000100) {
 		printf("  SUB? a5_2_5\n");
@@ -2839,7 +2852,7 @@ void teensy_3_2_emulate(uint8_t *data, uint32_t length) {
 	}
 
 	printf("\nExecution:\n");
-	for (int i = 0; i < 3735; ++i){
+	for (int i = 0; i < 3749; ++i){
 		step(&registers);
 	}
 }
