@@ -2852,7 +2852,7 @@ void teensy_3_2_emulate(uint8_t *data, uint32_t length) {
 	}
 
 	printf("\nExecution:\n");
-	for (int i = 0; i < 3749; ++i){
+	for (int i = 0; i < 3901; ++i){
 		step(&registers);
 	}
 }
