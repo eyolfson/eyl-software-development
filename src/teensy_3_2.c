@@ -2036,6 +2036,42 @@ static void a6_7_133_t1(struct registers *registers,
 	printf("  > R%d = %08X\n", d, registers->r[d]);
 }
 
+static void a6_7_144_t1(struct registers *registers,
+                        uint16_t first_halfword,
+                        uint16_t second_halfword)
+{
+	uint8_t n = (first_halfword & 0x000F) >> 0;
+	uint8_t imm3 = (second_halfword & 0x7000) >> 12;
+	uint8_t d = (second_halfword & 0x0F00) >> 8;
+	uint8_t imm2 = (second_halfword & 0x00C0) >> 6;
+	uint8_t widthminus1 = (second_halfword & 0x001F) >> 0;
+
+	uint8_t lsbit = (imm3 << 2) | imm2;
+
+	printf("  UBFX%s R%d, R%d, #%d, #%d\n",
+	       get_condition_field(registers), d, n, lsbit, widthminus1 + 1);
+
+	if (d == 13 || d == 15 || n == 13 || n == 15) {
+		assert(false);
+	}
+
+	if (ConditionPassed(registers)) {
+		uint8_t msbit = lsbit + widthminus1;
+		if (msbit <= 31) {
+			registers->r[d] = 0;
+			for (uint8_t i = 0; i < 32; ++i) {
+				if (i >= lsbit && i <= msbit) {
+					registers->r[d] |= (registers->r[n] & (1 << i)) >> lsbit;
+				}
+			}
+			printf("  > R%d = %08X\n", d, registers->r[d]);
+		}
+		else {
+			assert(false);
+		}
+	}
+}
+
 static void a6_7_145_t1(struct registers *registers,
                         uint16_t first_halfword,
                         uint16_t second_halfword)
@@ -2517,6 +2553,22 @@ static void a5_3_3(struct registers *registers,
 	else if (op == 0b01100) {
 		a6_7_78_t1(registers, first_halfword, second_halfword); // MOVT
 	}
+	else if ((op & 0b11101) == 0b10000) {
+		printf("  SSAT a5_3_3\n");
+	}
+	else if (op == 0b10100) {
+		assert(false);
+	}
+	else if (op == 0b10110) {
+		assert(false);
+	}
+	else if ((op & 0b11101) == 0b11000) {
+		printf("  USAT a5_3_3\n");
+	}
+	else if (op == 0b11100) {
+		a6_7_144_t1(registers,
+		            first_halfword, second_halfword); // UBFX
+	}
 	else {
 		assert(false);
 	}
@@ -2852,7 +2904,7 @@ void teensy_3_2_emulate(uint8_t *data, uint32_t length) {
 	}
 
 	printf("\nExecution:\n");
-	for (int i = 0; i < 3915; ++i){
+	for (int i = 0; i < 3918; ++i){
 		step(&registers);
 	}
 }

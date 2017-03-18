@@ -354,6 +354,15 @@ const char *get_address_name(uint32_t address)
 	case 0x40072018:
 		name = "USB0_OTGSTAT";
 		break;
+	case 0x4007209C:
+		name = "USB0_BDTPAGE1";
+		break;
+	case 0x400720B0:
+		name = "USB0_BDTPAGE2";
+		break;
+	case 0x400720B4:
+		name = "USB0_BDTPAGE3";
+		break;
 	case 0x40072108:
 		name = "USB0_CONTROL";
 		break;
