@@ -190,6 +190,16 @@ static struct ResultCarryTuple LSL_C(uint32_t x, uint8_t shift)
 	return T;
 }
 
+static struct ResultCarryTuple LSR_C(uint32_t x, uint8_t shift)
+{
+	assert(shift > 0);
+	uint64_t extended_x = x;
+	struct ResultCarryTuple T;
+	T.result = (extended_x >> shift) & 0xFFFFFFFF;
+	T.carry = ((extended_x >> (shift - 1)) & 0x1) == 0x1;
+	return T;
+}
+
 static struct ResultCarryTuple Shift_C(uint32_t value, enum SRType type,
                                        uint8_t amount, bool carry_in)
 {
@@ -202,6 +212,9 @@ static struct ResultCarryTuple Shift_C(uint32_t value, enum SRType type,
 		switch (type) {
 		case SRType_LSL:
 			T = LSL_C(value, amount);
+			break;
+		case SRType_LSR:
+			T = LSR_C(value, amount);
 			break;
 		default:
 			assert(false);
@@ -1423,6 +1436,44 @@ static void a6_7_67_t1(struct registers *registers,
 	}
 }
 
+static void LSR_immediate(struct registers *registers,
+                          uint8_t d, uint8_t m, bool setflags, uint8_t shift_n)
+{
+	printf("  LSR");
+	if (setflags) {
+		printf("S");
+	}
+	printf(" R%d, R%d, #%d\n", d, m, shift_n);
+
+	if (ConditionPassed(registers)) {
+		struct ResultCarryTuple T =
+			Shift_C(registers->r[m], SRType_LSR, shift_n,
+			        APSR_C(registers));
+		registers->r[d] = T.result;
+		printf("  > R%d = %08X\n", d, registers->r[d]);
+
+		if (setflags) {
+			setflags_ResultCarryTuple(registers, T);
+			printf("  > APSR = %08X\n", registers->apsr);
+		}
+	}
+}
+
+static void a6_7_69_t1(struct registers *registers,
+                       uint16_t halfword)
+{
+	uint8_t imm5 = (halfword & 0x07C0) >> 6;
+	uint8_t m = (halfword & 0x0038) >> 3;
+	uint8_t d = (halfword & 0x0007) >> 0;
+
+	bool setflags = !InITBlock(registers);
+
+	struct ShiftTNTuple T = DecodeImmShift(0b01, imm5);
+	uint8_t shift_n = T.shift_n;
+
+	LSR_immediate(registers, d, m, setflags, shift_n);
+}
+
 static void a6_7_73_t1(struct registers *registers,
                        uint16_t first_halfword,
                        uint16_t second_halfword)
@@ -1593,6 +1644,14 @@ static void a6_7_78_t1(struct registers *registers,
 	printf("  > R%d = %08X\n", d, registers->r[d]);
 }
 
+static void a6_7_84_t1(struct registers *registers,
+                       uint16_t first_halfword,
+                       uint16_t second_halfword)
+{
+	printf("  MVN");
+	printf("\n");
+}
+
 static void a6_7_87_t1(struct registers *registers, uint16_t halfword)
 {
 	printf("  NOP\n");
@@ -1619,6 +1678,42 @@ static void POP(struct registers *registers,
 		address = registers->r[13] + 4 * bit_count;
 		registers->r[13] = address;
 		printf("  > R13 = %08X\n", address);
+	}
+}
+
+static void a6_7_90_t1(struct registers *registers,
+                       uint16_t first_halfword,
+                       uint16_t second_halfword)
+{
+	uint8_t i = (first_halfword & 0x0400) >> 10;
+	uint8_t S = (first_halfword & 0x0010) >> 4;
+	uint8_t n = (first_halfword & 0x000F) >> 0;
+	uint8_t imm3 = (second_halfword & 0x7000) >> 12;
+	uint8_t d = (second_halfword & 0x0F00) >> 8;
+	uint8_t imm8 = (second_halfword & 0x00FF) >> 0;
+
+	uint16_t imm12 = (i << 11) | (imm3 << 8) | imm8;
+
+	struct ResultCarryTuple T = ThumbExpandImm_C(imm12, APSR_C(registers));
+	uint32_t imm32 = T.result;
+
+	bool setflags = S == 1;
+
+	printf("  ORR");
+	if (setflags) {
+		printf("S");
+	}
+	printf("%s R%d, R%d, #0x%08X\n",
+	       get_condition_field(registers), d, n, imm32);
+
+	if (ConditionPassed(registers)) {
+		uint32_t result = registers->r[n] | imm32;
+		registers->r[d] = result;
+		printf("  > R%d = %08X\n", d, registers->r[d]);
+		if (setflags) {
+			T.result = result;
+			setflags_ResultCarryTuple(registers, T);
+		}
 	}
 }
 
@@ -2109,7 +2204,7 @@ static void a5_2_1(struct registers *registers,
 		a6_7_67_t1(registers, halfword); // LSL
 	}
 	else if ((opcode & 0b11100) == 0b00100) {
-		printf("  LSR?\n");
+		a6_7_69_t1(registers, halfword); // LSR
 	}
 	else if ((opcode & 0b11100) == 0b01000) {
 		printf("  ASR?\n");
@@ -2474,10 +2569,12 @@ static void a5_3_1(struct registers *registers,
 	}
 	else if ((op & 0b11110) == 0b00100) {
 		if (!(rn == 0b1111)) {
-			printf("  ORR? a5_3_1\n");
+			a6_7_90_t1(registers,
+			           first_halfword, second_halfword); // ORR
 		}
 		else if (rn == 0b1111) {
-			a6_7_75_t2(registers, first_halfword, second_halfword);
+			a6_7_75_t2(registers,
+			           first_halfword, second_halfword); // MOV
 		}
 	}
 	else if ((op & 0b11110) == 0b00110) {
@@ -2485,7 +2582,8 @@ static void a5_3_1(struct registers *registers,
 			printf("  ORN? a5_3_1\n");
 		}
 		else if (rn == 0b1111) {
-			printf("  MVN? a5_3_1\n");
+			a6_7_84_t1(registers,
+			           first_halfword, second_halfword); // MVN
 		}
 	}
 	else if ((op & 0b11110) == 0b01000) {
@@ -2498,8 +2596,8 @@ static void a5_3_1(struct registers *registers,
 	}
 	else if ((op & 0b11110) == 0b10000) {
 		if (!(rd == 0b1111)) {
-			a6_7_3_t3(registers, first_halfword,
-			          second_halfword); // ADD
+			a6_7_3_t3(registers,
+			          first_halfword, second_halfword); // ADD
 		}
 		else if (rd == 0b1111) {
 			printf("  CMN? a5_3_1\n");
@@ -2904,7 +3002,7 @@ void teensy_3_2_emulate(uint8_t *data, uint32_t length) {
 	}
 
 	printf("\nExecution:\n");
-	for (int i = 0; i < 3918; ++i){
+	for (int i = 0; i < 3935; ++i){
 		step(&registers);
 	}
 }

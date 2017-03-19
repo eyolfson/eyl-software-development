@@ -354,6 +354,21 @@ const char *get_address_name(uint32_t address)
 	case 0x40072018:
 		name = "USB0_OTGSTAT";
 		break;
+	case 0x40072080:
+		name = "USB0_ISTAT";
+		break;
+	case 0x40072084:
+		name = "USB0_INTEN";
+		break;
+	case 0x40072088:
+		name = "USB0_ERRSTAT";
+		break;
+	case 0x40072090:
+		name = "USB0_STAT";
+		break;
+	case 0x40072094:
+		name = "USB0_CTL";
+		break;
 	case 0x4007209C:
 		name = "USB0_BDTPAGE1";
 		break;
@@ -362,6 +377,12 @@ const char *get_address_name(uint32_t address)
 		break;
 	case 0x400720B4:
 		name = "USB0_BDTPAGE3";
+		break;
+	case 0x40072100:
+		name = "USB0_USBCTRL";
+		break;
+	case 0x40072104:
+		name = "USB0_OBSERVE";
 		break;
 	case 0x40072108:
 		name = "USB0_CONTROL";
