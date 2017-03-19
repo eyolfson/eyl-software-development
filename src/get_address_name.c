@@ -537,6 +537,378 @@ const char *get_address_name(uint32_t address)
 	case 0xE000E404:
 		name = "NVIC_IPR1";
 		break;
+	case 0xE000E408:
+		name = "NVIC_IPR2";
+		break;
+	case 0xE000E40C:
+		name = "NVIC_IPR3";
+		break;
+	case 0xE000E410:
+		name = "NVIC_IPR4";
+		break;
+	case 0xE000E414:
+		name = "NVIC_IPR5";
+		break;
+	case 0xE000E418:
+		name = "NVIC_IPR6";
+		break;
+	case 0xE000E41C:
+		name = "NVIC_IPR7";
+		break;
+	case 0xE000E420:
+		name = "NVIC_IPR8";
+		break;
+	case 0xE000E424:
+		name = "NVIC_IPR9";
+		break;
+	case 0xE000E428:
+		name = "NVIC_IPR10";
+		break;
+	case 0xE000E42C:
+		name = "NVIC_IPR11";
+		break;
+	case 0xE000E430:
+		name = "NVIC_IPR12";
+		break;
+	case 0xE000E434:
+		name = "NVIC_IPR13";
+		break;
+	case 0xE000E438:
+		name = "NVIC_IPR14";
+		break;
+	case 0xE000E43C:
+		name = "NVIC_IPR15";
+		break;
+	case 0xE000E440:
+		name = "NVIC_IPR16";
+		break;
+	case 0xE000E444:
+		name = "NVIC_IPR17";
+		break;
+	case 0xE000E448:
+		name = "NVIC_IPR18 (Interrupt Number 72)";
+		break;
+	case 0xE000E449:
+		name = "NVIC_IPR18 (Interrupt Number 73)";
+		break;
+	case 0xE000E44A:
+		name = "NVIC_IPR18 (Interrupt Number 74)";
+		break;
+	case 0xE000E44B:
+		name = "NVIC_IPR18 (Interrupt Number 75)";
+		break;
+	case 0xE000E44C:
+		name = "NVIC_IPR19";
+		break;
+	case 0xE000E450:
+		name = "NVIC_IPR20";
+		break;
+	case 0xE000E454:
+		name = "NVIC_IPR21";
+		break;
+	case 0xE000E458:
+		name = "NVIC_IPR22";
+		break;
+	case 0xE000E45C:
+		name = "NVIC_IPR23";
+		break;
+	case 0xE000E460:
+		name = "NVIC_IPR24";
+		break;
+	case 0xE000E464:
+		name = "NVIC_IPR25";
+		break;
+	case 0xE000E468:
+		name = "NVIC_IPR26";
+		break;
+	case 0xE000E46C:
+		name = "NVIC_IPR27";
+		break;
+	case 0xE000E470:
+		name = "NVIC_IPR28";
+		break;
+	case 0xE000E474:
+		name = "NVIC_IPR29";
+		break;
+	case 0xE000E478:
+		name = "NVIC_IPR30";
+		break;
+	case 0xE000E47C:
+		name = "NVIC_IPR31";
+		break;
+	case 0xE000E480:
+		name = "NVIC_IPR32";
+		break;
+	case 0xE000E484:
+		name = "NVIC_IPR33";
+		break;
+	case 0xE000E488:
+		name = "NVIC_IPR34";
+		break;
+	case 0xE000E48C:
+		name = "NVIC_IPR35";
+		break;
+	case 0xE000E490:
+		name = "NVIC_IPR36";
+		break;
+	case 0xE000E494:
+		name = "NVIC_IPR37";
+		break;
+	case 0xE000E498:
+		name = "NVIC_IPR38";
+		break;
+	case 0xE000E49C:
+		name = "NVIC_IPR39";
+		break;
+	case 0xE000E4A0:
+		name = "NVIC_IPR40";
+		break;
+	case 0xE000E4A4:
+		name = "NVIC_IPR41";
+		break;
+	case 0xE000E4A8:
+		name = "NVIC_IPR42";
+		break;
+	case 0xE000E4AC:
+		name = "NVIC_IPR43";
+		break;
+	case 0xE000E4B0:
+		name = "NVIC_IPR44";
+		break;
+	case 0xE000E4B4:
+		name = "NVIC_IPR45";
+		break;
+	case 0xE000E4B8:
+		name = "NVIC_IPR46";
+		break;
+	case 0xE000E4BC:
+		name = "NVIC_IPR47";
+		break;
+	case 0xE000E4C0:
+		name = "NVIC_IPR48";
+		break;
+	case 0xE000E4C4:
+		name = "NVIC_IPR49";
+		break;
+	case 0xE000E4C8:
+		name = "NVIC_IPR50";
+		break;
+	case 0xE000E4CC:
+		name = "NVIC_IPR51";
+		break;
+	case 0xE000E4D0:
+		name = "NVIC_IPR52";
+		break;
+	case 0xE000E4D4:
+		name = "NVIC_IPR53";
+		break;
+	case 0xE000E4D8:
+		name = "NVIC_IPR54";
+		break;
+	case 0xE000E4DC:
+		name = "NVIC_IPR55";
+		break;
+	case 0xE000E4E0:
+		name = "NVIC_IPR56";
+		break;
+	case 0xE000E4E4:
+		name = "NVIC_IPR57";
+		break;
+	case 0xE000E4E8:
+		name = "NVIC_IPR58";
+		break;
+	case 0xE000E4EC:
+		name = "NVIC_IPR59";
+		break;
+	case 0xE000E4F0:
+		name = "NVIC_IPR60";
+		break;
+	case 0xE000E4F4:
+		name = "NVIC_IPR61";
+		break;
+	case 0xE000E4F8:
+		name = "NVIC_IPR62";
+		break;
+	case 0xE000E4FC:
+		name = "NVIC_IPR63";
+		break;
+	case 0xE000E500:
+		name = "NVIC_IPR64";
+		break;
+	case 0xE000E504:
+		name = "NVIC_IPR65";
+		break;
+	case 0xE000E508:
+		name = "NVIC_IPR66";
+		break;
+	case 0xE000E50C:
+		name = "NVIC_IPR67";
+		break;
+	case 0xE000E510:
+		name = "NVIC_IPR68";
+		break;
+	case 0xE000E514:
+		name = "NVIC_IPR69";
+		break;
+	case 0xE000E518:
+		name = "NVIC_IPR70";
+		break;
+	case 0xE000E51C:
+		name = "NVIC_IPR71";
+		break;
+	case 0xE000E520:
+		name = "NVIC_IPR72";
+		break;
+	case 0xE000E524:
+		name = "NVIC_IPR73";
+		break;
+	case 0xE000E528:
+		name = "NVIC_IPR74";
+		break;
+	case 0xE000E52C:
+		name = "NVIC_IPR75";
+		break;
+	case 0xE000E530:
+		name = "NVIC_IPR76";
+		break;
+	case 0xE000E534:
+		name = "NVIC_IPR77";
+		break;
+	case 0xE000E538:
+		name = "NVIC_IPR78";
+		break;
+	case 0xE000E53C:
+		name = "NVIC_IPR79";
+		break;
+	case 0xE000E540:
+		name = "NVIC_IPR80";
+		break;
+	case 0xE000E544:
+		name = "NVIC_IPR81";
+		break;
+	case 0xE000E548:
+		name = "NVIC_IPR82";
+		break;
+	case 0xE000E54C:
+		name = "NVIC_IPR83";
+		break;
+	case 0xE000E550:
+		name = "NVIC_IPR84";
+		break;
+	case 0xE000E554:
+		name = "NVIC_IPR85";
+		break;
+	case 0xE000E558:
+		name = "NVIC_IPR86";
+		break;
+	case 0xE000E55C:
+		name = "NVIC_IPR87";
+		break;
+	case 0xE000E560:
+		name = "NVIC_IPR88";
+		break;
+	case 0xE000E564:
+		name = "NVIC_IPR89";
+		break;
+	case 0xE000E568:
+		name = "NVIC_IPR90";
+		break;
+	case 0xE000E56C:
+		name = "NVIC_IPR91";
+		break;
+	case 0xE000E570:
+		name = "NVIC_IPR92";
+		break;
+	case 0xE000E574:
+		name = "NVIC_IPR93";
+		break;
+	case 0xE000E578:
+		name = "NVIC_IPR94";
+		break;
+	case 0xE000E57C:
+		name = "NVIC_IPR95";
+		break;
+	case 0xE000E580:
+		name = "NVIC_IPR96";
+		break;
+	case 0xE000E584:
+		name = "NVIC_IPR97";
+		break;
+	case 0xE000E588:
+		name = "NVIC_IPR98";
+		break;
+	case 0xE000E58C:
+		name = "NVIC_IPR99";
+		break;
+	case 0xE000E590:
+		name = "NVIC_IPR100";
+		break;
+	case 0xE000E594:
+		name = "NVIC_IPR101";
+		break;
+	case 0xE000E598:
+		name = "NVIC_IPR102";
+		break;
+	case 0xE000E59C:
+		name = "NVIC_IPR103";
+		break;
+	case 0xE000E5A0:
+		name = "NVIC_IPR104";
+		break;
+	case 0xE000E5A4:
+		name = "NVIC_IPR105";
+		break;
+	case 0xE000E5A8:
+		name = "NVIC_IPR106";
+		break;
+	case 0xE000E5AC:
+		name = "NVIC_IPR107";
+		break;
+	case 0xE000E5B0:
+		name = "NVIC_IPR108";
+		break;
+	case 0xE000E5B4:
+		name = "NVIC_IPR109";
+		break;
+	case 0xE000E5B8:
+		name = "NVIC_IPR110";
+		break;
+	case 0xE000E5BC:
+		name = "NVIC_IPR111";
+		break;
+	case 0xE000E5C0:
+		name = "NVIC_IPR112";
+		break;
+	case 0xE000E5C4:
+		name = "NVIC_IPR113";
+		break;
+	case 0xE000E5C8:
+		name = "NVIC_IPR114";
+		break;
+	case 0xE000E5CC:
+		name = "NVIC_IPR115";
+		break;
+	case 0xE000E5D0:
+		name = "NVIC_IPR116";
+		break;
+	case 0xE000E5D4:
+		name = "NVIC_IPR117";
+		break;
+	case 0xE000E5D8:
+		name = "NVIC_IPR118";
+		break;
+	case 0xE000E5DC:
+		name = "NVIC_IPR119";
+		break;
+	case 0xE000E5E0:
+		name = "NVIC_IPR120";
+		break;
+	case 0xE000E5E4:
+		name = "NVIC_IPR121";
+		break;
+	case 0xE000E5E8:
+		name = "NVIC_IPR122";
+		break;
 	case 0xE000E5EC:
 		name = "NVIC_IPR123";
 		break;
