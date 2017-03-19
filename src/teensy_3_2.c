@@ -934,6 +934,28 @@ static void a6_7_4_t1(struct registers *registers, uint16_t halfword)
 	}
 }
 
+static void a6_7_4_t2(struct registers *registers, uint16_t halfword)
+{
+	uint8_t DN = (halfword & 0x0080) >> 7;
+	uint8_t m = (halfword & 0x0078) >> 3;
+	uint8_t Rdn = (halfword & 0x0007) >> 0;
+
+	uint8_t dn = (DN << 3) | Rdn;
+
+	bool setflags = false;
+
+	printf("  ADD%s R%d, R%d\n", get_condition_field(registers), dn, m);
+
+	uint32_t shifted = registers->r[m];
+	struct ResultCarryOverflowTuple T = AddWithCarry(registers->r[dn],
+	                                                 shifted, false);
+
+	assert(dn != 15);
+
+	registers->r[dn] = T.result;
+	printf("  > R%d = %08X\n", dn, registers->r[dn]);
+}
+
 static void a6_7_4_t3(struct registers *registers,
                       uint16_t first_halfword,
                       uint16_t second_halfword)
@@ -949,7 +971,6 @@ static void a6_7_4_t3(struct registers *registers,
 	bool setflags = S == 1;
 	uint8_t imm5 = (imm3 << 2) | imm2;
 	struct ShiftTNTuple T = DecodeImmShift(type, imm5);
-
 
 	ADD_register(registers, true, d, n, m, setflags, T.shift_t, T.shift_n);
 }
@@ -1051,6 +1072,11 @@ static void a6_7_8_t1(struct registers *registers,
 			printf("  > APSR = %08X\n", registers->apsr);
 		}
 	}
+}
+
+static void a6_7_10_t1(struct registers *registers, uint16_t halfword)
+{
+	printf("  ASR\n");
 }
 
 static void BranchTo(struct registers *registers, uint32_t address)
@@ -2266,7 +2292,7 @@ static void a5_2_1(struct registers *registers,
 		a6_7_69_t1(registers, halfword); // LSR
 	}
 	else if ((opcode & 0b11100) == 0b01000) {
-		printf("  ASR?\n");
+		a6_7_10_t1(registers, halfword); // ASR
 	}
 	else if (opcode == 0b01100) {
 		a6_7_4_t1(registers, halfword);
@@ -2358,7 +2384,7 @@ static void a5_2_3(struct registers *registers,
 {
 	uint8_t opcode = (halfword & 0x03C0) >> 6;
 	if ((opcode & 0b1100) == 0b0000) {
-		printf("  ADD? a5_2_3\n");
+		a6_7_4_t2(registers, halfword); // ADD
 	}
 	else if (opcode == 0b0100) {
 		assert(false);
@@ -3061,7 +3087,7 @@ void teensy_3_2_emulate(uint8_t *data, uint32_t length) {
 	}
 
 	printf("\nExecution:\n");
-	for (int i = 0; i < 3937; ++i){
+	for (int i = 0; i < 3955; ++i){
 		step(&registers);
 	}
 }
