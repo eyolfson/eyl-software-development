@@ -190,6 +190,17 @@ static struct ResultCarryTuple LSL_C(uint32_t x, uint8_t shift)
 	return T;
 }
 
+static uint32_t LSL(uint32_t x, uint8_t shift)
+{
+	if (shift == 0) {
+		return x;
+	}
+	else {
+		struct ResultCarryTuple T = LSL_C(x, shift);
+		return T.result;
+	}
+}
+
 static struct ResultCarryTuple LSR_C(uint32_t x, uint8_t shift)
 {
 	assert(shift > 0);
@@ -197,6 +208,27 @@ static struct ResultCarryTuple LSR_C(uint32_t x, uint8_t shift)
 	struct ResultCarryTuple T;
 	T.result = (extended_x >> shift) & 0xFFFFFFFF;
 	T.carry = ((extended_x >> (shift - 1)) & 0x1) == 0x1;
+	return T;
+}
+
+static uint32_t LSR(uint32_t x, uint8_t shift)
+{
+	if (shift == 0) {
+		return x;
+	}
+	else {
+		struct ResultCarryTuple T = LSR_C(x, shift);
+		return T.result;
+	}
+}
+
+static struct ResultCarryTuple ROR_C(uint32_t x, uint8_t shift)
+{
+	assert(shift != 0);
+	uint8_t m = shift % 32;
+	struct ResultCarryTuple T;
+	T.result = LSR(x, m) | LSL(x, 32 - m);
+	T.carry = (T.result & 0x80000000) == 0x80000000;
 	return T;
 }
 
@@ -518,11 +550,9 @@ struct ResultCarryTuple ThumbExpandImm_C(uint16_t imm12, bool carry) {
 		T.carry = carry;
 	}
 	else {
-		uint8_t rotate = (imm12 & 0xF80) >> 7;
 		uint32_t unrotated_value = 0x80 + (imm12 & 0x7F);
-		uint32_t value = unrotated_value << (32 - rotate);
-		T.result = value;
-		T.carry = false;
+		uint8_t shift = (imm12 & 0xF80) >> 7;
+		T = ROR_C(unrotated_value, shift);
 	}
 
 	return T;
@@ -1648,8 +1678,36 @@ static void a6_7_84_t1(struct registers *registers,
                        uint16_t first_halfword,
                        uint16_t second_halfword)
 {
+	uint8_t i = (first_halfword & 0x0400) >> 10;
+	uint8_t S = (first_halfword & 0x0010) >> 4;
+	uint8_t imm3 = (second_halfword & 0x7000) >> 12;
+	uint8_t d = (second_halfword & 0x0F00) >> 8;
+	uint8_t imm8 = (second_halfword & 0x00FF) >> 0;
+
+	bool setflags = S == 1;
+
+	uint16_t imm12 = (i << 11) | (imm3 << 8) | imm8;
+
+	struct ResultCarryTuple T = ThumbExpandImm_C(imm12, APSR_C(registers));
+	uint32_t imm32 = T.result;
+
 	printf("  MVN");
-	printf("\n");
+	if (setflags) {
+		printf("S");
+	}
+	printf("%s R%d, #0x%08X\n",
+	       get_condition_field(registers), d, imm32);
+
+	if (ConditionPassed(registers)) {
+		uint32_t result = ~imm32;
+		registers->r[d] = result;
+		printf("  > R%d = %08X\n", d, registers->r[d]);
+		if (setflags) {
+			T.result = result;
+			setflags_ResultCarryTuple(registers, T);
+			printf("  > APSR = %08X\n", registers->apsr);
+		}
+	}
 }
 
 static void a6_7_87_t1(struct registers *registers, uint16_t halfword)
@@ -1713,6 +1771,7 @@ static void a6_7_90_t1(struct registers *registers,
 		if (setflags) {
 			T.result = result;
 			setflags_ResultCarryTuple(registers, T);
+			printf("  > APSR = %08X\n", registers->apsr);
 		}
 	}
 }
