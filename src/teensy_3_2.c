@@ -222,6 +222,20 @@ static uint32_t LSR(uint32_t x, uint8_t shift)
 	}
 }
 
+static struct ResultCarryTuple ASR_C(uint32_t x, uint8_t shift)
+{
+	assert(shift > 0);
+	uint64_t extended_x = x;
+	if ((x & 0x80000000) == 0x80000000) {
+		extended_x |= ((uint64_t) 0xFFFFFFFF00000000);
+	}
+	struct ResultCarryTuple T;
+	T.result = (extended_x >> shift) & 0xFFFFFFFF;
+	T.carry = (extended_x & (1 << (shift - 1)))
+	          == (((uint64_t) 1) << (shift - 1));
+	return T;
+}
+
 static struct ResultCarryTuple ROR_C(uint32_t x, uint8_t shift)
 {
 	assert(shift != 0);
@@ -247,6 +261,12 @@ static struct ResultCarryTuple Shift_C(uint32_t value, enum SRType type,
 			break;
 		case SRType_LSR:
 			T = LSR_C(value, amount);
+			break;
+		case SRType_ASR:
+			T = ASR_C(value, amount);
+			break;
+		case SRType_ROR:
+			T = ROR_C(value, amount);
 			break;
 		default:
 			assert(false);
@@ -1074,9 +1094,43 @@ static void a6_7_8_t1(struct registers *registers,
 	}
 }
 
+static void ASR_immediate(struct registers *registers,
+                          uint8_t d, uint8_t shift_n, uint8_t m, bool setflags)
+{
+	if (ConditionPassed(registers)) {
+		struct ResultCarryTuple T =
+			Shift_C(registers->r[m], SRType_ASR, shift_n,
+			        APSR_C(registers));
+		registers->r[d] = T.result;
+		printf("  > R%d = %08X\n", d, registers->r[d]);
+		if (setflags) {
+			setflags_ResultCarryTuple(registers, T);
+			printf("  > APSR = %08X\n", registers->apsr);
+		}
+	}
+}
+
 static void a6_7_10_t1(struct registers *registers, uint16_t halfword)
 {
-	printf("  ASR\n");
+	uint8_t imm5 = (halfword & 0x07C0) >> 6;
+	uint8_t m = (halfword & 0x0038) >> 3;
+	uint8_t d = (halfword & 0x0007) >> 0;
+
+	bool setflags = !InITBlock(registers);
+
+	struct ShiftTNTuple T = DecodeImmShift(0b10, imm5);
+	uint8_t shift_n = T.shift_n;
+
+	printf("  ASR");
+	if (setflags) {
+		printf("S");
+	}
+	else {
+		printf("%s", get_condition_field(registers));
+	}
+	printf(" R%d, R%d, #%d\n", d, m, imm5);
+
+	ASR_immediate(registers, d, shift_n, m, setflags);
 }
 
 static void BranchTo(struct registers *registers, uint32_t address)
@@ -1299,21 +1353,118 @@ assert(false && "TODO: Check advance");
 	printf("  > ITSTATE = %02X\n", registers->itstate);
 }
 
+static void LDR_immediate(struct registers *registers,
+                          uint8_t t, uint8_t n, uint32_t imm32,
+                          bool index, bool add, bool wback)
+{
+	if (index) {
+		if (!wback) {
+			printf("  LDR%s R%d, [R%d, #",
+			       get_condition_field(registers), t, n);
+			if (add) {
+				printf("+");
+			}
+			else {
+				printf("-");
+			}
+			printf("%d]\n", imm32);
+		}
+		else {
+			printf("  LDR%s R%d, [R%d, #",
+			       get_condition_field(registers), t, n);
+			if (add) {
+				printf("+");
+			}
+			else {
+				printf("-");
+			}
+			printf("%d]!\n", imm32);
+		}
+	}
+	else {
+		// wback == TRUE
+		printf("  LDR%s R%d, [R%d], #",
+		       get_condition_field(registers), t, n);
+		if (add) {
+			printf("+");
+		}
+		else {
+			printf("-");
+		}
+		printf("%d\n", imm32);
+	}
+
+	if (ConditionPassed(registers)) {
+		uint32_t offset_addr;
+		if (add) {
+			offset_addr = registers->r[n] + imm32;
+		}
+		else {
+			offset_addr = registers->r[n] - imm32;
+		}
+
+		uint32_t address;
+		if (index) {
+			address = offset_addr;
+		}
+		else {
+			address = registers->r[n];
+		}
+
+		uint32_t data = memory_word_read(address);
+		if (wback) {
+			registers->r[n] = offset_addr;
+			printf("  > R%d = %08X\n", n, registers->r[n]);
+		}
+
+		if (t == 15) {
+			assert(false);
+		}
+		else {
+			registers->r[t] = data;
+			printf("  > R%d = %08X\n", t, registers->r[t]);
+		}
+	}
+}
+
 static void a6_7_42_t1(struct registers *registers,
                        uint16_t first_halfword)
 {
 	uint8_t imm5 = (first_halfword & 0x07C0) >> 6;
-	uint8_t rn = (first_halfword & 0x0038) >> 3;
-	uint8_t rt = (first_halfword & 0x0007);
+	uint8_t n = (first_halfword & 0x0038) >> 3;
+	uint8_t t = (first_halfword & 0x0007);
+
 	uint32_t imm32 = imm5 << 2;
+	bool index = true;
+	bool add = true;
+	bool wback = false;
 
-	uint32_t offset_addr = registers->r[rn] + imm32;
-	uint32_t address = offset_addr;
-	printf("  LDR R%d [R%d, #%d]\n", rt, rn, imm32);
+	LDR_immediate(registers, t, n, imm32, index, add, wback);
+}
 
-	uint32_t data = memory_word_read(address);
-	printf("  > R%d = %08X\n", rt, data);
-	registers->r[rt] = data;
+static void a6_7_42_t4(struct registers *registers,
+                       uint16_t first_halfword,
+                       uint16_t second_halfword)
+{
+	uint8_t n = (first_halfword & 0x000F) >> 0;
+	uint8_t t = (second_halfword & 0xF000) >> 12;
+	uint8_t P = (second_halfword & 0x0400) >> 10;
+	uint8_t U = (second_halfword & 0x0200) >> 9;
+	uint8_t W = (second_halfword & 0x0100) >> 8;
+	uint8_t imm8 = (second_halfword & 0x00FF) >> 0;
+
+	uint32_t imm32 = imm8;
+	bool index = P == 1;
+	bool add = U == 1;
+	bool wback = W == 1;
+
+	assert(!(wback && (n == t)));
+	assert(!((t == 15)
+	         && InITBlock(registers) && !LastInITBlock(registers)));
+
+	assert(!(!index && !wback));
+
+	LDR_immediate(registers, t, n, imm32, index, add, wback);
 }
 
 static void LDR_literal(struct registers *registers,
@@ -2826,6 +2977,44 @@ static void a5_3_5(struct registers *registers,
 	}
 }
 
+static void a5_3_7(struct registers *registers,
+                   uint16_t first_halfword,
+                   uint16_t second_halfword)
+{
+	uint8_t op1 = (first_halfword & 0x0180) >> 7;
+	uint8_t n = (first_halfword & 0x000F) >> 0;
+	uint8_t op2 = (second_halfword & 0x0FC0) >> 6;
+
+	if (n != 0b1111) {
+		if (op1 == 0b01) {
+		}
+		else {
+			assert(op1 == 0b00);
+			if ((op2 & 0x24) == 0x24) {
+				a6_7_42_t4(registers,
+				           first_halfword,
+				           second_halfword); // LDR
+			}
+			else if ((op2 & 0x3C) == 0x30) {
+				printf("LDR a5_3_7 2\n");
+			}
+			else if ((op2 & 0x3C) == 0x38) {
+				printf("LDRT a5_3_7\n");
+			}
+			else if (op2 == 0x00) {
+				printf("LDR a5_3_7 3\n");
+			}
+			else {
+				assert(false);
+			}
+		}
+	}
+	else {
+		assert((op1 & 0b10) == 0b00);
+		printf("  Load register a5_3_7\n");
+	}
+}
+
 static void a5_3_10(struct registers *registers,
                     uint16_t first_halfword,
                     uint16_t second_halfword)
@@ -3014,7 +3203,8 @@ static void a5_3(struct registers *registers,
 			printf("Load halfword, unallocated memory hints\n");
 		}
 		else if ((op2 & 0b1100111) == 0b0000101) {
-			printf("Load word\n");
+			a5_3_7(registers,
+			       first_halfword, second_halfword); // Load word
 		}
 		else if ((op2 & 0b1110000) == 0b0100000) {
 			printf("Data processing\n");
@@ -3087,7 +3277,7 @@ void teensy_3_2_emulate(uint8_t *data, uint32_t length) {
 	}
 
 	printf("\nExecution:\n");
-	for (int i = 0; i < 3955; ++i){
+	for (int i = 0; i < 3973; ++i){
 		step(&registers);
 	}
 }
