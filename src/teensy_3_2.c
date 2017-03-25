@@ -845,7 +845,7 @@ static void a6_7_3_t2(struct registers *registers, uint16_t halfword)
 
 	uint32_t imm32 = imm8;
 
-	struct ResultCarryOverflowTuple R =
+	struct ResultCarryOverflowTuple T =
 		AddWithCarry(registers->r[n], imm32, false);
 
 	printf("  ADD");
@@ -854,8 +854,14 @@ static void a6_7_3_t2(struct registers *registers, uint16_t halfword)
 	}
 	printf(" R%d #%d\n", d, imm32);
 
-	registers->r[d] = R.result;
-	printf("  > R%d = %08X\n", d, registers->r[d]);
+	if (ConditionPassed(registers)) {
+		registers->r[d] = T.result;
+		printf("  > R%d = %08X\n", d, registers->r[d]);
+		if (setflags) {
+			setflags_ResultCarryOverflowTuple(registers, T);
+			printf("  > APSR = %08X\n", registers->apsr);
+		}
+	}
 }
 
 static void a6_7_3_t3(struct registers *registers,
@@ -1257,10 +1263,28 @@ static void a6_7_18_t1(struct registers *registers,
 	is_branch = true;
 }
 
-static void a6_7_20_t1(struct registers *registers,
-                       uint16_t first_halfword)
+static void a6_7_19_t1(struct registers *registers,
+                       uint16_t halfword)
 {
-	uint8_t m = (first_halfword & 0x0078) >> 3;
+	uint8_t m = (halfword & 0x0078) >> 3;
+
+	printf("  BLX%s R%d\n", get_condition_field(registers), m);
+
+	if (ConditionPassed(registers)) {
+		uint32_t target = registers->r[m];
+		uint32_t next_instr_address = PC(registers) - 2;
+		registers->r[14] = next_instr_address | 0b1;
+		printf("  > R14 = %08X\n", registers->r[14]);
+		BXWritePC(registers, target);
+
+		is_branch = true;
+	}
+}
+
+static void a6_7_20_t1(struct registers *registers,
+                       uint16_t halfword)
+{
+	uint8_t m = (halfword & 0x0078) >> 3;
 	printf("  BX R%d\n", m);
 	uint32_t address = registers->r[m] & ~(0x00000001);
 	registers->r[15] = address;
@@ -2553,7 +2577,7 @@ static void a5_2_3(struct registers *registers,
 		a6_7_20_t1(registers, halfword); // BX
 	}
 	else if ((opcode & 0b1110) == 0b1110) {
-		printf("  BLX? a5_2_3\n");
+		a6_7_19_t1(registers, halfword); // BLX
 	}
 	else {
 		assert(false);
@@ -3277,7 +3301,7 @@ void teensy_3_2_emulate(uint8_t *data, uint32_t length) {
 	}
 
 	printf("\nExecution:\n");
-	for (int i = 0; i < 3973; ++i){
+	for (int i = 0; i < 3948; ++i){
 		step(&registers);
 	}
 }
