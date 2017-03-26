@@ -1311,7 +1311,8 @@ static void a6_7_21_t1(struct registers *registers,
 	}
 	printf("Z R%d, %08X\n", rn, address);
 
-	if (registers->r[rn] == 0) {
+	if ((op == 0 && registers->r[rn] == 0)
+	    || (op == 1 && registers->r[rn] != 0)) {
 		registers->r[15] = address;
 		printf("  > R15 = %08X\n", address);
 		is_branch = true;
@@ -2037,16 +2038,10 @@ static void a6_7_97_t2(struct registers *registers,
 	POP(registers, all_registers);
 }
 
-static void a6_7_98_t1(struct registers *registers,
-                       uint16_t halfword)
+static void PUSH(struct registers *registers,
+                 uint16_t all_registers)
 {
-	uint8_t register_list = (halfword & 0x00FF) >> 0;
-	uint8_t M = (halfword & 0x0100) >> 8;
-	uint16_t all_registers = (M << 14) | register_list;
-
-	uint8_t bit_count = __builtin_popcount(all_registers);
-	uint32_t address = registers->r[13] - 4 * bit_count;
-	printf("  PUSH {");
+	printf("  PUSH%s {", get_condition_field(registers));
 	bool first = false;
 	for (uint8_t i = 0; i < 15; ++i) {
 		if ((all_registers & (0x0001 << i)) == (0x0001 << i)) {
@@ -2061,16 +2056,43 @@ static void a6_7_98_t1(struct registers *registers,
 	}
 	printf("}\n");
 
-	printf("  > Note: lower registers pushed first\n");
-	for (uint8_t i = 0; i < 15; ++i) {
-		if ((all_registers & (0x0001 << i)) == (0x0001 << i)) {
-			memory_word_write(address & 0xFFFFFFFC, registers->r[i]);
-			address += 4;
+	if (ConditionPassed(registers)) {
+		uint8_t bit_count = __builtin_popcount(all_registers);
+		uint32_t address = registers->r[13] - 4 * bit_count;
+		printf("  > Note: higher registers at higher addresses\n");
+		for (uint8_t i = 0; i < 15; ++i) {
+			if ((all_registers & (0x0001 << i)) == (0x0001 << i)) {
+				memory_word_write(address & 0xFFFFFFFC, registers->r[i]);
+				address += 4;
+			}
 		}
+		address = registers->r[13] - 4 * bit_count;
+		registers->r[13] = address;
+		printf("  > R13 = %08X\n", address);
 	}
-	address = registers->r[13] - 4 * bit_count;
-	registers->r[13] = address;
-	printf("  > R13 = %08X\n", address);
+}
+
+static void a6_7_98_t1(struct registers *registers,
+                       uint16_t halfword)
+{
+	uint8_t register_list = (halfword & 0x00FF) >> 0;
+	uint8_t M = (halfword & 0x0100) >> 8;
+
+	uint16_t all_registers = (M << 14) | register_list;
+
+	PUSH(registers, all_registers);
+}
+
+static void a6_7_98_t2(struct registers *registers,
+                       uint16_t first_halfword,
+                       uint16_t second_halfword)
+{
+	uint8_t M = (second_halfword & 0x4000) >> 14;
+	uint16_t register_list = (second_halfword & 0x1FFF) >> 0;
+
+	uint16_t all_registers = (M << 14) | register_list;
+
+	PUSH(registers, all_registers);
 }
 
 static void a6_7_106_t2(struct registers *registers,
@@ -2979,12 +3001,13 @@ static void a5_3_5(struct registers *registers,
 
 	if (op == 0b01) {
 		if (L == 0) {
-			printf("TODO: a5_3_5\n");
+			printf("TODO 1: a5_3_5\n");
 			assert(false);
 		}
 		else if (L == 1) {
 			if (!((W == 1) && (Rn == 0b1101))) {
-				printf("okay\n");
+				printf("TODO 2: a5_3_5\n");
+				assert(false);
 			}
 			else {
 				a6_7_97_t2(registers, first_halfword,
@@ -2993,8 +3016,20 @@ static void a5_3_5(struct registers *registers,
 		}
 	}
 	else if (op == 0b10) {
-		printf("TODO: a5_3_5\n");
-		assert(false);
+		if (L == 0) {
+			if (!(W == 1 && Rn == 0b1101)) {
+				printf("TODO 3: a5_3_5\n");
+				assert(false);
+			}
+			else {
+				a6_7_98_t2(registers, first_halfword,
+				           second_halfword); // PUSH
+			}
+		}
+		else if (L == 1) {
+			printf("TODO 3: a5_3_5\n");
+			assert(false);
+		}
 	}
 	else {
 		assert(false);
@@ -3301,7 +3336,7 @@ void teensy_3_2_emulate(uint8_t *data, uint32_t length) {
 	}
 
 	printf("\nExecution:\n");
-	for (int i = 0; i < 3948; ++i){
+	for (int i = 0; i < 4038; ++i){
 		step(&registers);
 	}
 }
