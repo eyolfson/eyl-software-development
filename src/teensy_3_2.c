@@ -2413,6 +2413,29 @@ static void a6_7_133_t1(struct registers *registers,
 	printf("  > R%d = %08X\n", d, registers->r[d]);
 }
 
+static void a6_7_134_t1(struct registers *registers,
+                        uint16_t halfword)
+{
+	uint8_t imm7 = (halfword & 0x007F) >> 0;
+
+	uint8_t d = 13;
+	bool setflags = false;
+
+	uint32_t imm32 = (imm7 << 2);
+
+	printf("  SUB%s SP, SP, #%d\n", get_condition_field(registers), imm7);
+
+	if (ConditionPassed(registers)) {
+		struct ResultCarryOverflowTuple T =
+			AddWithCarry(registers->r[d], ~imm32, true);
+		registers->r[d] = T.result;
+		printf("  > R%d = %08X\n", d, registers->r[d]);
+		if (setflags) {
+			setflags_ResultCarryOverflowTuple(registers, T);
+		}
+	}
+}
+
 static void a6_7_144_t1(struct registers *registers,
                         uint16_t first_halfword,
                         uint16_t second_halfword)
@@ -2681,8 +2704,7 @@ static void a5_2_5(struct registers *registers, uint16_t halfword)
 		a6_7_5_t2(registers, halfword); // ADD
 	}
 	else if ((opcode & 0b1111100) == 0b0000100) {
-		printf("  SUB? a5_2_5\n");
-		assert(false);
+		a6_7_134_t1(registers, halfword); // SUB
 	}
 	else if ((opcode & 0b1111000) == 0b0001000) {
 		a6_7_21_t1(registers, halfword); // CBNZ, CBZ
@@ -3336,7 +3358,7 @@ void teensy_3_2_emulate(uint8_t *data, uint32_t length) {
 	}
 
 	printf("\nExecution:\n");
-	for (int i = 0; i < 4038; ++i){
+	for (int i = 0; i < 4046; ++i){
 		step(&registers);
 	}
 }
