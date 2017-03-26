@@ -2162,9 +2162,25 @@ static void a6_7_119_t1(struct registers *registers,
 {
 	uint8_t imm5 = (halfword & 0x07C0) >> 6;
 	uint8_t n = (halfword & 0x0038) >> 3;
-	uint8_t t = (halfword & 0x0007);
+	uint8_t t = (halfword & 0x0007) >> 0;
 
 	uint32_t imm32 = imm5 << 2;
+	bool index = true;
+	bool add = true;
+	bool wback = false;
+
+	STR_immediate(registers, t, n, imm32, index, add, wback);
+}
+
+static void a6_7_119_t2(struct registers *registers,
+                        uint16_t halfword)
+{
+	uint8_t t = (halfword & 0x0700) >> 8;
+	uint8_t imm8 = (halfword & 0x00FF) >> 0;
+
+	uint8_t n = 13;
+	uint32_t imm32 = (imm8 << 2);
+
 	bool index = true;
 	bool add = true;
 	bool wback = false;
@@ -2522,9 +2538,11 @@ static void a5_2_1(struct registers *registers,
 	}
 	else if (opcode == 0b01110) {
 		printf("  ADD?\n");
+		assert(false);
 	}
 	else if (opcode == 0b01111) {
 		printf("  SUB?\n");
+		assert(false);
 	}
 	else if ((opcode & 0b11100) == 0b10000) {
 		a6_7_75_t1(registers, halfword);
@@ -2550,51 +2568,66 @@ static void a5_2_2(struct registers *registers,
 	switch (opcode) {
 	case 0b0000:
 		printf("  AND? a5_2_2\n");
+		assert(false);
 		break;
 	case 0b0001:
 		printf("  EOR? a5_2_2\n");
+		assert(false);
 		break;
 	case 0b0010:
 		printf("  LSL? a5_2_2\n");
+		assert(false);
 		break;
 	case 0b0011:
 		printf("  LSR? a5_2_2\n");
+		assert(false);
 		break;
 	case 0b0100:
 		printf("  ASR? a5_2_2\n");
+		assert(false);
 		break;
 	case 0b0101:
 		printf("  ADC? a5_2_2\n");
+		assert(false);
 		break;
 	case 0b0110:
 		printf("  SBC? a5_2_2\n");
+		assert(false);
 		break;
 	case 0b0111:
 		printf("  ROR? a5_2_2\n");
+		assert(false);
 		break;
 	case 0b1000:
 		printf("  TST? a5_2_2\n");
+		assert(false);
 		break;
 	case 0b1001:
 		printf("  RSB? a5_2_2\n");
+		assert(false);
 		break;
 	case 0b1010:
 		a6_7_28_t1(registers, halfword); // CMP
 		break;
 	case 0b1011:
 		printf("  CMN? a5_2_2\n");
+		assert(false);
 		break;
 	case 0b1100:
 		printf("  ORR? a5_2_2\n");
+		assert(false);
 		break;
 	case 0b1101:
 		printf("  MUL? a5_2_2\n");
+		assert(false);
 		break;
 	case 0b1110:
 		printf("  BIC? a5_2_2\n");
+		assert(false);
 		break;
 	case 0b1111:
 		printf("  MVN? a5_2_2\n");
+		assert(false);
 		break;
 	}
 }
@@ -2611,9 +2644,11 @@ static void a5_2_3(struct registers *registers,
 	}
 	else if (opcode == 0b0101) {
 		printf("  CMP? a5_2_3\n");
+		assert(false);
 	}
 	else if ((opcode & 0b1110) == 0b0110) {
 		printf("  CMP? a5_2_3\n");
+		assert(false);
 	}
 	else if ((opcode & 0b1100) == 0b1000) {
 		a6_7_76_t1(registers, halfword); // MOV
@@ -2642,24 +2677,28 @@ static void a5_2_4(struct registers *registers,
 			break;
 		case 0b001:
 			printf("  STRH? a5_2_4\n");
+			assert(false);
 			break;
 		case 0b010:
 			a6_7_122_t1(registers, halfword); // STRB
 			break;
 		case 0b011:
 			printf("  LDRSB? a5_2_4\n");
+			assert(false);
 			break;
 		case 0b100:
 			a6_7_44_t1(registers, halfword); // LDR
 			break;
 		case 0b101:
 			printf("  LDRH? a5_2_4\n");
+			assert(false);
 			break;
 		case 0b110:
 			a6_7_47_t1(registers, halfword); // LDRB
 			break;
 		case 0b111:
 			printf("  LDRSH? a5_2_4\n");
+			assert(false);
 			break;
 		default:
 			assert(false);
@@ -2681,11 +2720,19 @@ static void a5_2_4(struct registers *registers,
 			a6_7_45_t1(registers, halfword);
 		}
 	}
-	else if (opA == 0x8) {
-		if ((opB & 0x4) == 0x0) {
+	else if (opA == 0b1000) {
+		if ((opB & 0b100) == 0b000) {
 			a6_7_128_t1(registers, halfword);
 		}
 		else {
+			assert(false);
+		}
+	}
+	else if (opA == 0b1001) {
+		if ((opB & 0b100) == 0b000) {
+			a6_7_119_t2(registers, halfword); // STR
+		}
+		else if ((opB & 0b100) == 0b100) {
 			assert(false);
 		}
 	}
@@ -2836,6 +2883,7 @@ static void a5_2(struct registers *registers, uint16_t halfword)
 	}
 	else if ((opcode & 0b111110) == 0b101000) {
 		printf("  ADR? a5_2\n");
+		assert(false);
 	}
 	else if ((opcode & 0b111110) == 0b101010) {
 		a6_7_5_t1(registers, halfword); // ADD
@@ -2866,10 +2914,12 @@ static void a5_3_1(struct registers *registers,
 		}
 		else if (rd == 0b1111) {
 			printf("  TST? a5_3_1\n");
+			assert(false);
 		}
 	}
 	else if ((op & 0b11110) == 0b00010) {
 		printf("  BIC? a5_3_1\n");
+		assert(false);
 	}
 	else if ((op & 0b11110) == 0b00100) {
 		if (!(rn == 0b1111)) {
@@ -2884,6 +2934,7 @@ static void a5_3_1(struct registers *registers,
 	else if ((op & 0b11110) == 0b00110) {
 		if (!(rn == 0b1111)) {
 			printf("  ORN? a5_3_1\n");
+			assert(false);
 		}
 		else if (rn == 0b1111) {
 			a6_7_84_t1(registers,
@@ -2893,9 +2944,11 @@ static void a5_3_1(struct registers *registers,
 	else if ((op & 0b11110) == 0b01000) {
 		if (!(rd == 0b1111)) {
 			printf("  EOR? a5_3_1\n");
+			assert(false);
 		}
 		else if (rd == 0b1111) {
 			printf("  TEQ? a5_3_1\n");
+			assert(false);
 		}
 	}
 	else if ((op & 0b11110) == 0b10000) {
@@ -2905,20 +2958,25 @@ static void a5_3_1(struct registers *registers,
 		}
 		else if (rd == 0b1111) {
 			printf("  CMN? a5_3_1\n");
+			assert(false);
 		}
 	}
 	else if ((op & 0b11110) == 0b10100) {
 		printf("  ADC? a5_3_1\n");
+		assert(false);
 	}
 	else if ((op & 0b11110) == 0b10110) {
 		printf("  SBC? a5_3_1\n");
+		assert(false);
 	}
 	else if ((op & 0b11110) == 0b11010) {
 		if (!(rd == 0b1111)) {
 			printf("  SUB? a5_3_1\n");
+			assert(false);
 		}
 		else if (rd == 0b1111) {
 			printf("  CMP? a5_3_1\n");
+			assert(false);
 		}
 	}
 	else if ((op & 0b11110) == 0b11100) {
@@ -2936,9 +2994,11 @@ static void a5_3_3(struct registers *registers,
 	if (op == 0b00000) {
 		if (!(rn == 0b1111)) {
 			printf("  ADD a5_3_3\n");
+			assert(false);
 		}
 		else {
 			printf("  ADR a5_3_3\n");
+			assert(false);
 		}
 	}
 	else if (op == 0b00100) {
@@ -2947,9 +3007,11 @@ static void a5_3_3(struct registers *registers,
 	else if (op == 0b01010) {
 		if (!(rn == 0b1111)) {
 			printf("  SUB a5_3_3\n");
+			assert(false);
 		}
 		else {
 			printf("  ADR a5_3_3\n");
+			assert(false);
 		}
 	}
 	else if (op == 0b01100) {
@@ -2957,6 +3019,7 @@ static void a5_3_3(struct registers *registers,
 	}
 	else if ((op & 0b11101) == 0b10000) {
 		printf("  SSAT a5_3_3\n");
+		assert(false);
 	}
 	else if (op == 0b10100) {
 		assert(false);
@@ -2966,6 +3029,7 @@ static void a5_3_3(struct registers *registers,
 	}
 	else if ((op & 0b11101) == 0b11000) {
 		printf("  USAT a5_3_3\n");
+		assert(false);
 	}
 	else if (op == 0b11100) {
 		a6_7_144_t1(registers,
@@ -2985,18 +3049,23 @@ static void a5_3_4(struct registers *registers,
 
 	if (((op2 & 0b101) == 0b000) && !((op1 & 0b0111000) == 0b0111000)) {
 		printf("B a5_3_4\n");
+		assert(false);
 	}
 	else if (((op2 & 0b101) == 0b000) && ((op1 & 0b1111110) == 0b0111000)) {
 		printf("MSR a5_3_4\n");
+		assert(false);
 	}
 	else if (((op2 & 0b101) == 0b000) && (op1 == 0b0111010)) {
 		printf("Hint a5_3_4\n");
+		assert(false);
 	}
 	else if (((op2 & 0b101) == 0b000) && (op1 == 0b0111011)) {
 		printf("Misc a5_3_4\n");
+		assert(false);
 	}
 	else if (((op2 & 0b101) == 0b000) && ((op1 & 0b1111110) == 0b0111110)) {
 		printf("MSR a5_3_4\n");
+		assert(false);
 	}
 	else if ((op2  == 0b010) && (op1 == 0b1111111)) {
 		assert(false);
@@ -3078,12 +3147,15 @@ static void a5_3_7(struct registers *registers,
 			}
 			else if ((op2 & 0x3C) == 0x30) {
 				printf("LDR a5_3_7 2\n");
+				assert(false);
 			}
 			else if ((op2 & 0x3C) == 0x38) {
 				printf("LDRT a5_3_7\n");
+				assert(false);
 			}
 			else if (op2 == 0x00) {
 				printf("LDR a5_3_7 3\n");
+				assert(false);
 			}
 			else {
 				assert(false);
@@ -3093,6 +3165,7 @@ static void a5_3_7(struct registers *registers,
 	else {
 		assert((op1 & 0b10) == 0b00);
 		printf("  Load register a5_3_7\n");
+		assert(false);
 	}
 }
 
@@ -3114,6 +3187,7 @@ static void a5_3_10(struct registers *registers,
 	}
 	else if ((op1 == 0b010) && ((op2 & 0b100000) == 0b000000)) {
 		printf("STR a5_3_10\n");
+		assert(false);
 	}
 }
 
@@ -3185,6 +3259,7 @@ static void a5_3_14(struct registers *registers,
 		}
 		else if (a == 0b1111) {
 			printf("  MUL a5_3_14\n");
+			assert(false);
 		}
 	}
 	else if (op2 == 0b01) {
@@ -3206,14 +3281,17 @@ static void a5_3_15(struct registers *registers,
 	case 0b000:
 		assert(op2 == 0b0000);
 		printf("  SMULL a5_3_15\n");
+		assert(false);
 		break;
 	case 0b001:
 		assert(op2 == 0b1111);
 		printf("  SDIV a5_3_15\n");
+		assert(false);
 		break;
 	case 0b010:
 		assert(op2 == 0b0000);
 		printf("  UMULL a5_3_15\n");
+		assert(false);
 		break;
 	case 0b011:
 		assert(op2 == 0b1111);
@@ -3222,10 +3300,12 @@ static void a5_3_15(struct registers *registers,
 	case 0b100:
 		assert(op2 == 0b0000);
 		printf("  SMLAL a5_3_15\n");
+		assert(false);
 		break;
 	case 0b110:
 		assert(op2 == 0b0000);
 		printf("  UMLAL a5_3_15\n");
+		assert(false);
 		break;
 	default:
 		assert(false);
@@ -3279,9 +3359,11 @@ static void a5_3(struct registers *registers,
 		}
 		else if ((op2 & 0b1100111) == 0b0000001) {
 			printf("Load bytes, memory hints\n");
+			assert(false);
 		}
 		else if ((op2 & 0b1100111) == 0b0000011) {
 			printf("Load halfword, unallocated memory hints\n");
+			assert(false);
 		}
 		else if ((op2 & 0b1100111) == 0b0000101) {
 			a5_3_7(registers,
@@ -3289,6 +3371,7 @@ static void a5_3(struct registers *registers,
 		}
 		else if ((op2 & 0b1110000) == 0b0100000) {
 			printf("Data processing\n");
+			assert(false);
 		}
 		else if ((op2 & 0b1111000) == 0b0110000) {
 			a5_3_14(registers, first_halfword, second_halfword);
@@ -3298,6 +3381,7 @@ static void a5_3(struct registers *registers,
 		}
 		else if ((op2 & 0b1000000) == 0b1000000) {
 			printf("Coprocessor\n");
+			assert(false);
 		}
 	}
 }
