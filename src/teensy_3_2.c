@@ -162,6 +162,7 @@ enum SRType {
 };
 
 static bool is_branch;
+static bool is_it_inst;
 
 struct ShiftTNTuple {
 	enum SRType shift_t;
@@ -414,7 +415,7 @@ void ITAdvance(struct registers *registers)
 		registers->itstate = (registers->itstate & 0b11100000)
 		                     | new_state;
 	}
-	printf("ITAdvance, ITSTATE=%02X\n", registers->itstate);
+	printf("  > ITSTATE = %02X\n", registers->itstate);
 }
 
 bool InITBlock(struct registers *registers)
@@ -1228,15 +1229,52 @@ static void a6_7_12_t4(struct registers *registers,
 	B(registers, imm32);
 }
 
+static void a6_7_15_t1(struct registers *registers,
+                       uint16_t first_halfword,
+                       uint16_t second_halfword)
+{
+	uint8_t i    =  (first_halfword & 0x0400) >> 10;
+	uint8_t S    =  (first_halfword & 0x0010) >>  4;
+	uint8_t n    =  (first_halfword & 0x000F) >>  0;
+	uint8_t imm3 = (second_halfword & 0x7000) >> 12;
+	uint8_t d    = (second_halfword & 0x0F00) >>  8;
+	uint8_t imm8 = (second_halfword & 0x00FF) >>  0;
+
+	uint16_t imm12 = (i << 11) | (imm3 << 8) | imm8;
+	bool setflags = S == 1;
+	struct ResultCarryTuple T = ThumbExpandImm_C(imm12, APSR_C(registers));
+	uint32_t imm32 = T.result;
+	bool carry = T.carry;
+	assert(!(d == 13 || d == 15 || n == 13 || n == 15));
+
+	printf("  BIC");
+	if (setflags) {
+		printf("S");
+	}
+	printf("%s R%d, R%d, #0x%08X\n",
+	       get_condition_field(registers), d, n, imm32);
+
+	if (ConditionPassed(registers)) {
+		uint32_t result = registers->r[n] & (~imm32);
+		registers->r[d] = result;
+		printf("  > R%d = %08X\n", d, registers->r[d]);
+		if (setflags) {
+			T.result = result;
+			setflags_ResultCarryTuple(registers, T);
+			printf("  > APSR = %08X\n", registers->apsr);
+		}
+	}
+}
+
 static void a6_7_18_t1(struct registers *registers,
                        uint16_t first_halfword,
                        uint16_t second_halfword)
 {
-	uint8_t S = (first_halfword & 0x0400) >> 10;
-	uint16_t imm10 = (first_halfword & 0x03FF);
-	uint8_t J1 = (second_halfword & 0x2000) >> 13;
-	uint8_t J2 = (second_halfword & 0x0800) >> 11;
-	uint16_t imm11 = (second_halfword & 0x07FF);
+	uint8_t  S     =  (first_halfword & 0x0400) >> 10;
+	uint16_t imm10 =  (first_halfword & 0x03FF) >>  0;
+	uint8_t  J1    = (second_halfword & 0x2000) >> 13;
+	uint8_t  J2    = (second_halfword & 0x0800) >> 11;
+	uint16_t imm11 = (second_halfword & 0x07FF) >>  0;
 
 	uint8_t I1 = (~(J1 ^ S)) & 1;
 	uint8_t I2 = (~(J2 ^ S)) & 1;
@@ -1368,14 +1406,44 @@ static void a6_7_28_t1(struct registers *registers, uint16_t halfword)
 static void a6_7_37_t1(struct registers *registers, uint16_t halfword)
 {
 	uint8_t firstcond = (halfword & 0x00F0) >> 4;
-	uint8_t mask = (halfword & 0x000F) >> 0;
+	uint8_t mask      = (halfword & 0x000F) >> 0;
 
-	assert(mask == 0b1000);
+	uint8_t firstcond0 = (firstcond & 0b0001) >> 0;
 
-assert(false && "TODO: Check advance");
-	printf("  IT %s\n", get_condition_name(firstcond));
+	uint8_t mask3 = (mask & 0b1000) >> 3;
+	uint8_t mask2 = (mask & 0b0100) >> 2;
+	uint8_t mask1 = (mask & 0b0010) >> 1;
+	uint8_t mask0 = (mask & 0b0001) >> 0;
+
+	printf("  IT", get_condition_name(firstcond));
+	if (mask0 == 1) {
+		if (mask3 == firstcond0) { printf("T"); }
+		else                     { printf("E"); }
+		if (mask2 == firstcond0) { printf("T"); }
+		else                     { printf("E"); }
+		if (mask1 == firstcond0) { printf("T"); }
+		else                     { printf("E"); }
+	}
+	else if (mask1 == 1) {
+		if (mask3 == firstcond0) { printf("T"); }
+		else                     { printf("E"); }
+		if (mask2 == firstcond0) { printf("T"); }
+		else                     { printf("E"); }
+	}
+	else if (mask2 == 1) {
+		if (mask3 == firstcond0) { printf("T"); }
+		else                     { printf("E"); }
+	}
+	else {
+		assert(mask == 0b1000);
+	}
+
+	printf(" %s\n", get_condition_name(firstcond));
+
 	registers->itstate = (halfword & 0x00FF) >> 0;
 	printf("  > ITSTATE = %02X\n", registers->itstate);
+
+	is_it_inst = true;
 }
 
 static void LDR_immediate(struct registers *registers,
@@ -1781,7 +1849,8 @@ static void a6_7_75_t1(struct registers *registers,
 	bool setflags;
 	if (InITBlock(registers)) {
 		setflags = false;
-		printf("  MOV%s R%d, #%d\n", d, imm8);
+		printf("  MOV%s R%d, #%d\n",
+		       get_condition_field(registers), d, imm8);
 	}
 	else {
 		setflags = true;
@@ -1848,9 +1917,12 @@ static void a6_7_76_t1(struct registers *registers,
 	assert(d != 15);
 
 
-	printf("  MOV R%d, R%d\n", d, m);
-	registers->r[d] = result;
-	printf("  > R%d = %08X\n", d, registers->r[d]);
+	printf("  MOV%s R%d, R%d\n", get_condition_field(registers), d, m);
+
+	if (ConditionPassed(registers)) {
+		registers->r[d] = result;
+		printf("  > R%d = %08X\n", d, registers->r[d]);
+	}
 }
 
 static void a6_7_78_t1(struct registers *registers,
@@ -2918,8 +2990,7 @@ static void a5_3_1(struct registers *registers,
 		}
 	}
 	else if ((op & 0b11110) == 0b00010) {
-		printf("  BIC? a5_3_1\n");
-		assert(false);
+		a6_7_15_t1(registers, first_halfword, second_halfword); // BIC
 	}
 	else if ((op & 0b11110) == 0b00100) {
 		if (!(rn == 0b1111)) {
@@ -3389,6 +3460,7 @@ static void a5_3(struct registers *registers,
 static void step(struct registers *registers)
 {
 	is_branch = false;
+	is_it_inst = false;
 
 	uint16_t halfword = memory_halfword_read(registers->r[15]);
 	if (((halfword & 0xE000) == 0xE000)
@@ -3408,7 +3480,7 @@ static void step(struct registers *registers)
 		}
 	}
 
-	if (InITBlock(registers)) {
+	if (InITBlock(registers) && !is_it_inst) {
 		ITAdvance(registers);
 	}
 }
@@ -3442,7 +3514,7 @@ void teensy_3_2_emulate(uint8_t *data, uint32_t length) {
 	}
 
 	printf("\nExecution:\n");
-	for (int i = 0; i < 4046; ++i){
+	for (int i = 0; i < 4079; ++i){
 		step(&registers);
 	}
 }
