@@ -1359,21 +1359,12 @@ static void a6_7_21_t1(struct registers *registers,
 
 static void CMP(struct registers *registers, uint8_t n, uint32_t imm32)
 {
-	struct ResultCarryOverflowTuple T = AddWithCarry(registers->r[n],
-	                                                 ~imm32, true);
-	uint32_t new_apsr = (T.result & 0x80000000);
-	if (T.result == 0) {
-		new_apsr |= 0x40000000;
+	if (ConditionPassed(registers)) {
+		struct ResultCarryOverflowTuple T =
+			AddWithCarry(registers->r[n], ~imm32, true);
+		setflags_ResultCarryOverflowTuple(registers, T);
+		printf("  > APSR = %08X\n", registers->apsr);
 	}
-	if (T.carry) {
-		new_apsr |= 0x20000000;
-	}
-	if (T.overflow) {
-		new_apsr |= 0x10000000;
-	}
-	registers->apsr &= ~(0xF0000000);
-	registers->apsr |= new_apsr;
-	printf("  > APSR = %08X\n", registers->apsr);
 }
 
 static void a6_7_27_t1(struct registers *registers, uint16_t halfword)
@@ -1383,8 +1374,27 @@ static void a6_7_27_t1(struct registers *registers, uint16_t halfword)
 
 	uint32_t imm32 = imm8;
 
-	// TODO: CMP
-	printf("  CMP R%d, #%d\n", n, imm32);
+	printf("  CMP%s R%d, #%d\n",
+	       get_condition_field(registers),  n, imm32);
+	CMP(registers, n, imm32);
+}
+
+static void a6_7_27_t2(struct registers *registers,
+                       uint16_t first_halfword,
+                       uint16_t second_halfword)
+{
+	uint8_t i    =  (first_halfword & 0x0400) >> 10;
+	uint8_t n    =  (first_halfword & 0x000F) >>  0;
+	uint8_t imm3 = (second_halfword & 0x7000) >> 12;
+	uint8_t imm8 = (second_halfword & 0x00FF) >>  0;
+
+	uint16_t imm12 = (i << 11) | (imm3 << 8) | imm8;
+
+	uint32_t imm32 = ThumbExpandImm(registers, imm12);
+
+	assert(n != 15);
+
+	printf("  CMP%s R%d, #%d\n", get_condition_field(registers), n, imm32);
 	CMP(registers, n, imm32);
 }
 
@@ -1398,8 +1408,8 @@ static void a6_7_28_t1(struct registers *registers, uint16_t halfword)
 	assert(shift_n == 0);
 	uint32_t shifted = registers->r[m];
 
-	// TODO: CMP
-	printf("  CMP R%d, R%d\n", n, m);
+	printf("  CMP%s R%d, R%d\n",
+	       get_condition_field(registers), n, m);
 	CMP(registers, n, shifted);
 }
 
@@ -3046,8 +3056,8 @@ static void a5_3_1(struct registers *registers,
 			assert(false);
 		}
 		else if (rd == 0b1111) {
-			printf("  CMP? a5_3_1\n");
-			assert(false);
+			a6_7_27_t2(registers,
+			           first_halfword, second_halfword); // CMP
 		}
 	}
 	else if ((op & 0b11110) == 0b11100) {
@@ -3490,8 +3500,8 @@ void teensy_3_2_emulate(uint8_t *data, uint32_t length) {
 
 	struct registers registers;
 
-	uint32_t initial_sp = word_at_address(0x00000000);
-	uint32_t initial_pc = word_at_address(0x00000004);
+	uint32_t initial_sp  = word_at_address(0x00000000);
+	uint32_t initial_pc  = word_at_address(0x00000004);
 	uint32_t nmi_address = word_at_address(0x00000008);
 
 	printf("Initial Stack Pointer:   %08X\n", initial_sp);
@@ -3514,7 +3524,7 @@ void teensy_3_2_emulate(uint8_t *data, uint32_t length) {
 	}
 
 	printf("\nExecution:\n");
-	for (int i = 0; i < 4084; ++i){
+	for (int i = 0; i < 4086; ++i){
 		step(&registers);
 	}
 }
