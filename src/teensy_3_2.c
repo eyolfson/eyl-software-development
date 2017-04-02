@@ -118,22 +118,48 @@ static void memory_write(uint32_t address, uint8_t data)
 	else if ((address >= SRAM_LOWER) && (address <= SRAM_UPPER)) {
 		sram[address - SRAM_LOWER] = data;
 	}
+	else if ((address >= 0x40000000) && (address <= 0x400FFFFF)) {
+		// Intentionally left blank
+	}
+	else if ((address >= 0xE0000000) && (address <= 0xE00FFFFF)) {
+		// Intentionally left blank
+	}
+	else {
+		assert(false);
+	}
 }
 
-static uint32_t memory_byte_write(uint32_t address, uint8_t data)
+static void memory_byte_write(uint32_t address, uint8_t data)
 {
-	printf("  > MemU[%08X,1] (%s) = %02X\n",
-	       address, get_address_name(address), data);
+	const char *name = get_address_name(address);
+	printf("  > (%s) MemU[%08X,1] = %02X\n", name, address, data);
 	memory_write(address, data);
 }
 
-static uint32_t memory_word_write(uint32_t address, uint32_t data)
+static void memory_halfword_write(uint32_t address, uint16_t data)
 {
-	printf("  > MemU[%08X,4] = %08X\n", address, data);
+	const char *name = get_address_name(address);
+	printf("  > (%s) MemU[%08X,2] = %04X\n", name, address, data);
+	memory_write(address    , data      );
+	memory_write(address + 1, data >>  8);
+}
+
+static void memory_word_write(uint32_t address, uint32_t data)
+{
+	const char *name = get_address_name(address);
+	printf("  > (%s) MemU[%08X,4] = %08X\n", name, address, data);
 	memory_write(address    , data      );
 	memory_write(address + 1, data >>  8);
 	memory_write(address + 2, data >> 16);
 	memory_write(address + 3, data >> 24);
+}
+
+static uint32_t word_at_address(uint32_t base)
+{
+	return flash[base] +
+	       + (flash[base + 1] * 0x100)
+	       + (flash[base + 2] * 0x10000)
+	       + (flash[base + 3] * 0x1000000);
 }
 
 struct registers {
@@ -670,126 +696,6 @@ uint8_t APSR_V(struct registers *registers)
 	return (registers->apsr & 0x10000000) >> 28;
 }
 */
-
-static void memory_write_byte(uint32_t address, uint8_t byte)
-{
-	const char *name = get_address_name(address);
-
-	printf("  > MemU[%08X, 1]", address);
-	if (name) {
-		printf(" (%s)", name);
-	}
-	printf(" = %02X", byte);
-
-	if (address < 0x20008000) {
-		flash[address] = byte;
-	}
-
-	if (address >= 0xE0000000 && address <= 0xE000EFFF) {
-		printf(" (System Control Space - SCS)");
-	}
-
-	printf("\n");
-}
-
-static void memory_write_halfword(uint32_t address, uint16_t halfword)
-{
-	const char *name = get_address_name(address);
-
-	printf("  > MemU[%08X, 2]", address);
-	if (name) {
-		printf(" (%s)", name);
-	}
-	printf(" = %04X", halfword);
-
-	if (address < 0x20008000) {
-		flash[address] = (halfword & 0x00FF);
-		flash[address + 1] = ((halfword & 0xFF00) >> 8);
-	}
-	else if (address == 0x40052000) {
-		if (halfword == 0x0010) {
-			printf(" (ALLOWUPDATE)");
-		}
-	}
-	else if (address == 0x4005200E) {
-		if (halfword == 0xC520) {
-			printf(" (FIRST CODE)");
-		}
-		else if (halfword == 0xD928) {
-			printf(" (SECOND CODE)");
-		}
-		else {
-			printf(" (RESET)");
-		}
-	}
-
-	printf("\n");
-}
-
-static void memory_write_word(uint32_t address, uint32_t word)
-{
-	const char *name = get_address_name(address);
-
-	printf("  > MemU[%08X, 4]", address);
-	if (name) {
-		printf(" (%s)", name);
-	}
-	printf(" = %08X", word);
-
-	printf("\n");
-}
-
-static uint32_t word_at_address(uint32_t base)
-{
-	return flash[base] +
-	       + (flash[base + 1] * 0x100)
-	       + (flash[base + 2] * 0x10000)
-	       + (flash[base + 3] * 0x1000000);
-}
-
-static uint8_t memory_read_byte(uint32_t address)
-{
-	if (address < SRAM_LOWER) {
-		uint8_t value = flash[address];
-		printf("  > MemU[%08X, 1] = %02X\n", address, value);
-		return value;
-	}
-	else if (address >= SRAM_LOWER && address <= SRAM_UPPER) {
-		printf("  > MemU[%08X, 1] (SRAM) = %02X\n", address, 0);
-		return 0;
-	}
-	else {
-		const char *name = get_address_name(address);
-		printf("  > MemU[%08X, 1]", address);
-		if (name) {
-			printf(" (%s)", name);
-		}
-		printf(" = 0 (DEFAULT)\n");
-		return 0;
-	}
-}
-
-static uint32_t memory_read_word(uint32_t address)
-{
-	if (address < SRAM_LOWER) {
-		uint32_t value = word_at_address(address);
-		printf("  > MemU[%08X, 4] = %08X\n", address, value);
-		return value;
-	}
-	else if (address >= SRAM_LOWER && address <= SRAM_UPPER) {
-		printf("  > MemU[%08X, 4] (SRAM) = %08X\n", address, 0);
-		return 0;
-	}
-	else {
-		const char *name = get_address_name(address);
-		printf("  > UMem[%08X, 4]", address);
-		if (name) {
-			printf(" (%s)", name);
-		}
-		printf(" = 0 (DEFAULT)\n");
-		return 0;
-	}
-}
 
 static void set_bit(uint32_t *v, uint8_t i) { *v |= (1 << i); }
 
@@ -2026,7 +1932,7 @@ static void a6_7_78_t1(struct registers *registers,
 	                 + (imm3 << 8)
 	                 + imm8;
 
-	printf("  MOVT%s R%d, #%d\n",
+	printf("  MOVT%s R%d, #0x%04X\n",
 	       get_condition_field(registers), d, imm16);
 
 	registers->r[d] &= 0xFFFF;
@@ -2307,8 +2213,8 @@ static void STR_immediate(struct registers *registers,
 	else {
 		printf("  STR R%d, [R%d], #%d\n", t, n, imm32);
 	}
-	memory_write_word(address, registers->r[t]);
 
+	memory_word_write(address, registers->r[t]);
 	if (wback) {
 		printf("  > R%d = %08X\n", n, offset_addr);
 		registers->r[n] = offset_addr;
@@ -2421,7 +2327,7 @@ static void STRB(struct registers *registers,
 	}
 
 	uint8_t value = registers->r[t] & 0x000000FF;
-	memory_write_byte(address, value);
+	memory_byte_write(address, value);
 
 	if (wback) {
 		registers->r[n] = offset_addr;
@@ -2512,7 +2418,7 @@ static void a6_7_128_t1(struct registers *registers,
 
 	printf("  STRH R%d [R%d, #%d]\n", rt, rn, imm32);
 
-	memory_write_halfword(address, value);
+	memory_halfword_write(address, value);
 }
 
 static void a6_7_132_t2(struct registers *registers,
