@@ -801,7 +801,8 @@ static void a6_7_3_t3(struct registers *registers,
 	if (setflags) {
 		printf("S");
 	}
-	printf(".W R%d, R%d, #%d\n", d, n, imm32);
+	printf("%s.W R%d, R%d, #%d\n",
+	       get_condition_field(registers), d, n, imm32);
 
 	ADD_immediate(registers, d, n, setflags, imm32);
 }
@@ -1053,6 +1054,34 @@ static void a6_7_10_t1(struct registers *registers, uint16_t halfword)
 	ASR_immediate(registers, d, shift_n, m, setflags);
 }
 
+static void a6_7_10_t2(struct registers *registers,
+                       uint16_t first_halfword,
+                       uint16_t second_halfword)
+{
+	uint8_t S    =  (first_halfword & 0x0010) >>  4;
+	uint8_t imm3 = (second_halfword & 0x7000) >> 12;
+	uint8_t d    = (second_halfword & 0x0F00) >>  8;
+	uint8_t imm2 = (second_halfword & 0x00C0) >>  6;
+	uint8_t m    = (second_halfword & 0x000F) >>  0;
+
+	bool setflags = S == 1;
+	uint8_t imm5 = (imm3 << 2) | imm2;
+
+	struct ShiftTNTuple T = DecodeImmShift(0b10, imm5);
+	uint8_t shift_n = T.shift_n;
+
+	assert(!(d == 13 || d == 15 || m == 13 || m == 15));
+
+	printf("  ASR");
+	if (setflags) {
+		printf("S");
+	}
+	printf("%s.W R%d, R%d, #%d\n",
+	       get_condition_field(registers), d, m, imm5);
+
+	ASR_immediate(registers, d, shift_n, m, setflags);
+}
+
 static void BranchTo(struct registers *registers, uint32_t address)
 {
 	registers->r[15] = address;
@@ -1140,6 +1169,8 @@ static void a6_7_12_t3(struct registers *registers,
 
 	uint32_t address = PC(registers) + imm32;
 	printf("  B%s label_%08X\n", get_condition_field(registers), address);
+
+	B(registers, imm32);
 }
 
 static void a6_7_12_t4(struct registers *registers,
@@ -1363,9 +1394,34 @@ static void a6_7_28_t1(struct registers *registers, uint16_t halfword)
 {
 	uint8_t m = (halfword & 0x0038) >> 3;
 	uint8_t n = (halfword & 0x0007) >> 0;
+
 	enum SRType shift_t = SRType_LSL;
 	uint8_t shift_n = 0;
 
+	// TODO use proper CMP register function
+	assert(shift_n == 0);
+	uint32_t shifted = registers->r[m];
+
+	printf("  CMP%s R%d, R%d\n",
+	       get_condition_field(registers), n, m);
+	CMP(registers, n, shifted);
+}
+
+static void a6_7_28_t2(struct registers *registers, uint16_t halfword)
+{
+	uint8_t N  = (halfword & 0x0080) >> 7;
+	uint8_t m  = (halfword & 0x0078) >> 3;
+	uint8_t Rn = (halfword & 0x0007) >> 0;
+
+	uint8_t n = (N << 3) | Rn;
+
+	enum SRType shift_t = SRType_LSL;
+	uint8_t shift_n = 0;
+
+	assert(!((n < 8) && (m < 8)));
+	assert(!((n == 15) || (m == 15)));
+
+	// TODO use proper CMP register function
 	assert(shift_n == 0);
 	uint32_t shifted = registers->r[m];
 
@@ -1499,6 +1555,22 @@ static void a6_7_42_t1(struct registers *registers,
 	uint8_t t    = (halfword & 0x0007) >> 0;
 
 	uint32_t imm32 = imm5 << 2;
+	bool index = true;
+	bool add = true;
+	bool wback = false;
+
+	LDR_immediate(registers, t, n, imm32, index, add, wback);
+}
+
+static void a6_7_42_t3(struct registers *registers,
+                       uint16_t first_halfword,
+                       uint16_t second_halfword)
+{
+	uint8_t  n     =  (first_halfword & 0x000F) >>  0;
+	uint8_t  t     = (second_halfword & 0xF000) >> 12;
+	uint16_t imm12 = (second_halfword & 0x0FFF) >>  0;
+
+	uint32_t imm32 = imm12;
 	bool index = true;
 	bool add = true;
 	bool wback = false;
@@ -2707,12 +2779,10 @@ static void a5_2_3(struct registers *registers,
 		assert(false);
 	}
 	else if (opcode == 0b0101) {
-		printf("  CMP? a5_2_3\n");
-		assert(false);
+		a6_7_28_t2(registers, halfword); // CMP
 	}
 	else if ((opcode & 0b1110) == 0b0110) {
-		printf("  CMP? a5_2_3\n");
-		assert(false);
+		a6_7_28_t2(registers, halfword); // CMP
 	}
 	else if ((opcode & 0b1100) == 0b1000) {
 		a6_7_76_t1(registers, halfword); // MOV
@@ -3201,6 +3271,9 @@ static void a5_3_7(struct registers *registers,
 
 	if (n != 0b1111) {
 		if (op1 == 0b01) {
+			a6_7_42_t3(registers,
+			           first_halfword,
+			           second_halfword); // LDR
 		}
 		else {
 			assert(op1 == 0b00);
@@ -3291,7 +3364,9 @@ static void a5_3_11(struct registers *registers,
 				           second_halfword); // LSR
 				break;
 			case 0b10:
-				assert(false);
+				a6_7_10_t2(registers,
+				           first_halfword,
+				           second_halfword); // ASR
 				break;
 			case 0b11:
 				assert(false);
@@ -3329,6 +3404,35 @@ static void a5_3_11(struct registers *registers,
 		assert(false);
 	}
 	else if (op == 0b1110) {
+		assert(false);
+	}
+}
+
+static void a5_3_12(struct registers *registers,
+                    uint16_t first_halfword,
+                    uint16_t second_halfword)
+{
+	uint8_t op1 =  (first_halfword & 0x00F0) >> 4;
+	uint8_t op2 = (second_halfword & 0x00F0) >> 4;
+
+	if (op2 == 0b0000) {
+		if ((op1 == 0b1110) == 0b0000) {
+			assert(false);
+		}
+		else if ((op1 == 0b1110) == 0b0010) {
+			assert(false);
+		}
+		else if ((op1 == 0b1110) == 0b0100) {
+			assert(false);
+		}
+		else if ((op1 == 0b1110) == 0b0110) {
+			assert(false);
+		}
+		else {
+			assert(false);
+		}
+	}
+	else {
 		assert(false);
 	}
 }
@@ -3460,8 +3564,7 @@ static void a5_3(struct registers *registers,
 			       first_halfword, second_halfword); // Load word
 		}
 		else if ((op2 & 0b1110000) == 0b0100000) {
-			printf("Data processing\n");
-			assert(false);
+			a5_3_12(registers, first_halfword, second_halfword);
 		}
 		else if ((op2 & 0b1111000) == 0b0110000) {
 			a5_3_14(registers, first_halfword, second_halfword);
@@ -3533,7 +3636,7 @@ void teensy_3_2_emulate(uint8_t *data, uint32_t length) {
 	}
 
 	printf("\nExecution:\n");
-	for (int i = 0; i < 4100; ++i){
+	for (int i = 0; i < 4109; ++i) {
 		step(&registers);
 	}
 }
