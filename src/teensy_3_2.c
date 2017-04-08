@@ -2147,28 +2147,11 @@ static void a6_7_87_t1(struct registers *registers, uint16_t halfword)
 	printf("  NOP\n");
 }
 
-static void POP(struct registers *registers,
-                uint16_t all_registers)
+static void a6_7_89_t1(struct registers *registers,
+                       uint16_t first_halfword,
+                       uint16_t second_halfword)
 {
-	if (ConditionPassed(registers)) {
-		uint32_t address = SP(registers);
-		for (uint8_t i = 0; i < 15; ++i) {
-			if ((all_registers & (0x0001 << i)) == (0x0001 << i)) {
-				registers->r[i] = memory_word_read(address);
-				printf("  > R%d = %08X (MemA[%08X, 4])\n",
-				       i, registers->r[i], address);
-				address += 4;
-			}
-		}
-		if ((all_registers & (0x0001 << 15)) == (0x0001 << 15)) {
-			uint32_t arg = memory_word_read(address);
-			LoadWritePC(registers, arg);
-		}
-		uint8_t bit_count = __builtin_popcount(all_registers);
-		address = registers->r[13] + 4 * bit_count;
-		registers->r[13] = address;
-		printf("  > R13 = %08X\n", address);
-	}
+	assert(false);
 }
 
 static void a6_7_90_t1(struct registers *registers,
@@ -2205,6 +2188,106 @@ static void a6_7_90_t1(struct registers *registers,
 			setflags_ResultCarryTuple(registers, T);
 			printf("  > APSR = %08X\n", registers->apsr);
 		}
+	}
+}
+
+static void ORR_register(struct registers *registers,
+                         uint8_t d, uint8_t n, uint8_t m, bool setflags,
+                         enum SRType shift_t, uint8_t shift_n)
+{
+	if (ConditionPassed(registers)) {
+		struct ResultCarryTuple T =
+			Shift_C(registers->r[m], shift_t, shift_n,
+			        APSR_C(registers));
+		uint32_t shifted = T.result;
+		uint32_t result = registers->r[m] | shifted;
+		registers->r[d] = result;
+		printf("  > R%d = %08X\n", d, registers->r[d]);
+		if (setflags) {
+			T.result = result;
+			setflags_ResultCarryTuple(registers, T);
+			printf("  > APSR = %08X\n", registers->apsr);
+		}
+	}
+}
+
+static void a6_7_91_t1(struct registers *registers,
+                       uint16_t halfword)
+{
+	uint8_t m  = (halfword & 0x0038) >>  3;
+	uint8_t dn = (halfword & 0x0007) >>  0;
+
+	uint8_t d = dn;
+	uint8_t n = dn;
+	bool setflags = !InITBlock(registers);
+	enum SRType shift_t = SRType_LSL;
+	uint8_t shift_n = 0;
+
+	printf("  ORR");
+	if (setflags) {
+		printf("S");
+	}
+	printf("%s R%d, R%d\n",
+	       get_condition_field(registers), dn, m);
+
+	ORR_register(registers, d, n, m, setflags, shift_t, shift_n);
+}
+
+static void a6_7_91_t2(struct registers *registers,
+                       uint16_t first_halfword,
+                       uint16_t second_halfword)
+{
+	uint8_t S    =  (first_halfword & 0x0010) >>  4;
+	uint8_t n    =  (first_halfword & 0x000F) >>  0;
+	uint8_t imm3 = (second_halfword & 0x7000) >> 12;
+	uint8_t d    = (second_halfword & 0x0F00) >>  8;
+	uint8_t imm2 = (second_halfword & 0x00C0) >>  6;
+	uint8_t type = (second_halfword & 0x0030) >>  4;
+	uint8_t m    = (second_halfword & 0x000F) >>  0;
+
+	bool setflags = S == 1;
+	uint8_t imm5 = (imm3 << 2) | imm2;
+	struct ShiftTNTuple T = DecodeImmShift(type, imm5);
+	enum SRType shift_t = T.shift_t;
+	uint8_t shift_n = T.shift_n;
+
+	assert(!(d == 13 || d == 15 || n == 13 || m == 13 || m == 15));
+
+	printf("  ORR");
+	if (setflags) {
+		printf("S");
+	}
+	printf("%s.W R%d, R%d, R%d",
+	       get_condition_field(registers), d, n, m);
+	if (shift_n != 0) {
+		printf(", <shift>");
+	}
+	printf("\n");
+
+	ORR_register(registers, d, n, m, setflags, shift_t, shift_n);
+}
+
+static void POP(struct registers *registers,
+                uint16_t all_registers)
+{
+	if (ConditionPassed(registers)) {
+		uint32_t address = SP(registers);
+		for (uint8_t i = 0; i < 15; ++i) {
+			if ((all_registers & (0x0001 << i)) == (0x0001 << i)) {
+				registers->r[i] = memory_word_read(address);
+				printf("  > R%d = %08X (MemA[%08X, 4])\n",
+				       i, registers->r[i], address);
+				address += 4;
+			}
+		}
+		if ((all_registers & (0x0001 << 15)) == (0x0001 << 15)) {
+			uint32_t arg = memory_word_read(address);
+			LoadWritePC(registers, arg);
+		}
+		uint8_t bit_count = __builtin_popcount(all_registers);
+		address = registers->r[13] + 4 * bit_count;
+		registers->r[13] = address;
+		printf("  > R13 = %08X\n", address);
 	}
 }
 
@@ -2527,11 +2610,9 @@ static void STR_register(struct registers *registers,
                          bool index, bool add, bool wback,
                          enum SRType shift_t, uint8_t shift_n)
 {
-	assert(shift_t == SRType_LSL);
-	assert(shift_n == 0);
-
 	if (ConditionPassed(registers)) {
-		uint32_t offset = registers->r[m];
+		uint32_t offset = Shift(registers->r[m], shift_t,
+		                        shift_n, APSR_C(registers));
 		uint32_t address = registers->r[n] + offset;
 		uint32_t data = registers->r[t];
 		memory_word_write(address, data);
@@ -2549,9 +2630,39 @@ static void a6_7_120_t1(struct registers *registers,
 	bool add = true;
 	bool wback = false;
 
+	enum SRType shift_t = SRType_LSL;
+	uint8_t shift_n = 0;
+
 	printf("  STR%s R%d, [R%d, R%d]\n",
 	       get_condition_field(registers), t, n, m);
-	STR_register(registers, t, n, m, index, add, wback, SRType_LSL, 0);
+
+	STR_register(registers, t, n, m, index, add, wback, shift_t, shift_n);
+}
+
+static void a6_7_120_t2(struct registers *registers,
+                        uint16_t first_halfword,
+                        uint16_t second_halfword)
+{
+	uint8_t n    =  (first_halfword & 0x000F) >>  0;
+	uint8_t t    = (second_halfword & 0xF000) >> 12;
+	uint8_t imm2 = (second_halfword & 0x0030) >>  4;
+	uint8_t m    = (second_halfword & 0x000F) >>  0;
+
+	bool index = true;
+	bool add = true;
+	bool wback = false;
+
+	enum SRType shift_t = SRType_LSL;
+	uint8_t shift_n = imm2;
+
+	printf("  STR%s R%d, [R%d, R%d",
+	       get_condition_field(registers), t, n, m);
+	if (shift_n != 0) {
+		printf(", LSL #%d", imm2);
+	}
+	printf("]\n");
+
+	STR_register(registers, t, n, m, index, add, wback, shift_t, shift_n);
 }
 
 static void STRB(struct registers *registers,
@@ -2929,8 +3040,7 @@ static void a5_2_2(struct registers *registers,
 		assert(false);
 		break;
 	case 0b1100:
-		printf("  ORR? a5_2_2\n");
-		assert(false);
+		a6_7_91_t1(registers, halfword); // ORR (register)
 		break;
 	case 0b1101:
 		printf("  MUL? a5_2_2\n");
@@ -3518,8 +3628,8 @@ static void a5_3_10(struct registers *registers,
 		a6_7_119_t4(registers, first_halfword, second_halfword);
 	}
 	else if ((op1 == 0b010) && ((op2 & 0b100000) == 0b000000)) {
-		printf("STR a5_3_10\n");
-		assert(false);
+		// STR (register)
+		a6_7_120_t2(registers, first_halfword, second_halfword);
 	}
 	else {
 		assert(false);
@@ -3543,7 +3653,8 @@ static void a5_3_11(struct registers *registers,
 	}
 	else if (op == 0b0010) {
 		if (n != 0b1111) {
-			assert(false);
+			// ORR (register)
+			a6_7_91_t2(registers, first_halfword, second_halfword);
 		}
 		else {
 			uint8_t imm3 = (second_halfword & 0x7000) >> 12;
@@ -3835,7 +3946,7 @@ void teensy_3_2_emulate(uint8_t *data, uint32_t length) {
 	}
 
 	printf("\nExecution:\n");
-	for (int i = 0; i < 4247; ++i) {
+	for (int i = 0; i < 4282; ++i) {
 		step(&registers);
 	}
 }
