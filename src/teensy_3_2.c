@@ -74,6 +74,9 @@ static uint8_t memory_read(uint32_t address)
 		}
 		return 0;
 	}
+	else if ((address >= 0x42000000) && (address <= 0x43FFFFFF)) {
+		// Intentionally left blank
+	}
 	else if ((address >= 0xE0000000) && (address <= 0xFFFFFFFF)) {
 		return 0;
 	}
@@ -119,6 +122,9 @@ static void memory_write(uint32_t address, uint8_t data)
 		sram[address - SRAM_LOWER] = data;
 	}
 	else if ((address >= 0x40000000) && (address <= 0x400FFFFF)) {
+		// Intentionally left blank
+	}
+	else if ((address >= 0x42000000) && (address <= 0x43FFFFFF)) {
 		// Intentionally left blank
 	}
 	else if ((address >= 0xE0000000) && (address <= 0xE00FFFFF)) {
@@ -1679,11 +1685,9 @@ static void LDR_register(struct registers *registers,
                          bool index, bool add, bool wback,
                          enum SRType shift_t, uint8_t shift_n)
 {
-	assert(shift_t == SRType_LSL);
-	assert(shift_n == 0);
-
 	if (ConditionPassed(registers)) {
-		uint32_t offset = registers->r[m];
+		uint32_t offset = Shift(registers->r[m], shift_t,
+		                        shift_n, APSR_C(registers));
 		uint32_t offset_addr;
 		if (add) {
 			offset_addr = registers->r[n] + offset;
@@ -1720,9 +1724,44 @@ static void a6_7_44_t1(struct registers *registers, uint16_t halfword)
 	uint8_t n = (halfword & 0x0038) >> 3;
 	uint8_t t = (halfword & 0x0007) >> 0;
 
+	bool index = true;
+	bool add = true;
+	bool wback = false;
+	enum SRType shift_t = SRType_LSL;
+	uint8_t shift_n = 0;
+
 	printf("  LDR%s R%d, [R%d, R%d]\n",
 	       get_condition_field(registers), t, n, m);
-	LDR_register(registers, t, n, m, true, true, false, SRType_LSL, 0);
+
+	LDR_register(registers, t, n, m, index, add, wback, shift_t, shift_n);
+}
+
+static void a6_7_44_t2(struct registers *registers,
+                       uint16_t first_halfword, uint16_t second_halfword)
+{
+	uint8_t n    =  (first_halfword & 0x000F) >>  0;
+	uint8_t t    = (second_halfword & 0xF000) >> 12;
+	uint8_t imm2 = (second_halfword & 0x0030) >>  4;
+	uint8_t m    = (second_halfword & 0x000F) >>  0;
+
+	bool index = true;
+	bool add = true;
+	bool wback = false;
+	enum SRType shift_t = SRType_LSL;
+	uint8_t shift_n = imm2;
+
+	assert(!(m == 13 || m == 15));
+	assert(!(t == 15 && InITBlock(registers)
+	         && !LastInITBlock(registers)));
+
+	printf("  LDR%s.W R%d, [R%d, R%d",
+	       get_condition_field(registers), t, n, m);
+	if (shift_n != 0) {
+		printf(", LSL #%d", shift_n);
+	}
+	printf("]\n");
+
+	LDR_register(registers, t, n, m, index, add, wback, shift_t, shift_n);
 }
 
 static void a6_7_45_t1(struct registers *registers,
@@ -2712,16 +2751,35 @@ static void a6_7_121_t1(struct registers *registers,
 	STRB(registers, t, n, imm32, index, add, wback);
 }
 
+static void a6_7_121_t2(struct registers *registers,
+                        uint16_t first_halfword,
+                        uint16_t second_halfword)
+{
+	uint8_t  n     =  (first_halfword & 0x000F) >>  0;
+	uint8_t  t     = (second_halfword & 0xF000) >> 12;
+	uint16_t imm12 = (second_halfword & 0x0FFF) >>  0;
+
+	uint32_t imm32 = imm12;
+	bool index = true;
+	bool add = true;
+	bool wback = false;
+
+	assert(!(n == 15)); // UNDEFINED
+	assert(!(t == 13 || t == 15)); // UNPREDICTABLE
+
+	STRB(registers, t, n, imm32, index, add, wback);
+}
+
 static void a6_7_121_t3(struct registers *registers,
                         uint16_t first_halfword,
                         uint16_t second_halfword)
 {
-	uint8_t n = (first_halfword & 0x000F) >> 0;
-	uint8_t t = (second_halfword & 0xF000) >> 12;
-	uint8_t P = (second_halfword & 0x0400) >> 10;
-	uint8_t U = (second_halfword & 0x0200) >> 9;
-	uint8_t W = (second_halfword & 0x0100) >> 8;
-	uint8_t imm8 = (second_halfword & 0x00FF) >> 0;
+	uint8_t n    =  (first_halfword & 0x000F) >>  0;
+	uint8_t t    = (second_halfword & 0xF000) >> 12;
+	uint8_t P    = (second_halfword & 0x0400) >> 10;
+	uint8_t U    = (second_halfword & 0x0200) >>  9;
+	uint8_t W    = (second_halfword & 0x0100) >>  8;
+	uint8_t imm8 = (second_halfword & 0x00FF) >>  0;
 
 	uint32_t imm32 = imm8;
 	bool index = P == 1;
@@ -3579,9 +3637,10 @@ static void a5_3_7(struct registers *registers,
 				printf("LDRT a5_3_7\n");
 				assert(false);
 			}
-			else if (op2 == 0x00) {
-				printf("LDR a5_3_7 3\n");
-				assert(false);
+			else if (op2 == 0b000000) {
+				// LDR (register)
+				a6_7_44_t2(registers,
+				           first_halfword, second_halfword);
 			}
 			else {
 				assert(false);
@@ -3603,9 +3662,11 @@ static void a5_3_10(struct registers *registers,
 	uint8_t op2 = (second_halfword & 0x0FC0) >> 6;
 
 	if (op1 == 0b100) {
-		assert(false); // STRB (immediate)
+		// STRB (immediate)
+		a6_7_121_t2(registers, first_halfword, second_halfword);
 	}
 	else if ((op1 == 0b000) && ((op2 & 0b100000) == 0b100000)) {
+		// STRB (immediate)
 		a6_7_121_t3(registers, first_halfword, second_halfword);
 	}
 	else if ((op1 == 0b000) && ((op2 & 0b100000) == 0b000000)) {
@@ -3946,7 +4007,7 @@ void teensy_3_2_emulate(uint8_t *data, uint32_t length) {
 	}
 
 	printf("\nExecution:\n");
-	for (int i = 0; i < 4340; ++i) {
+	for (int i = 0; i < 4362; ++i) {
 		step(&registers);
 	}
 }
