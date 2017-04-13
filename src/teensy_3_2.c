@@ -76,12 +76,14 @@ static uint8_t memory_read(uint32_t address)
 	}
 	else if ((address >= 0x42000000) && (address <= 0x43FFFFFF)) {
 		// Intentionally left blank
+		return 0;
 	}
 	else if ((address >= 0xE0000000) && (address <= 0xFFFFFFFF)) {
 		return 0;
 	}
 	else {
-		printf("%08X\n", address);
+		printf("memory_read(%08X)\n", address);
+		assert(false);
 	}
 }
 
@@ -1764,21 +1766,74 @@ static void a6_7_44_t2(struct registers *registers,
 	LDR_register(registers, t, n, m, index, add, wback, shift_t, shift_n);
 }
 
+static void LDRB_immediate(struct registers *registers,
+                           uint8_t t, uint8_t n, int32_t imm32,
+                           bool index, bool add, bool wback)
+{
+	if (ConditionPassed(registers)) {
+		uint32_t offset_addr;
+		if (add) {
+			offset_addr = registers->r[n] + imm32;
+		}
+		else {
+			offset_addr = registers->r[n] - imm32;
+		}
+		uint32_t address;
+		if (index) {
+			address = offset_addr;
+		}
+		else {
+			address = registers->r[n];
+		}
+
+		uint8_t data = memory_byte_read(address);
+		registers->r[t] = data;
+		printf("  > R%d = %08X\n", t, registers->r[t]);
+
+		if (wback) {
+			registers->r[n] = offset_addr;
+			printf("  > R%d = %08X\n", n, registers->r[n]);
+		}
+	}
+}
+
 static void a6_7_45_t1(struct registers *registers,
                        uint16_t halfword)
 {
 	uint8_t imm5 = (halfword & 0x07C0) >> 6;
-	uint8_t rn = (halfword & 0x0038) >> 3;
-	uint8_t rt = (halfword & 0x0007);
+	uint8_t n    = (halfword & 0x0038) >> 3;
+	uint8_t t    = (halfword & 0x0007) >> 0;
+
 	uint32_t imm32 = imm5;
+	bool index = true;
+	bool add = true;
+	bool wback = false;
 
-	uint32_t offset_addr = registers->r[rn] + imm32;
-	uint32_t address = offset_addr;
+	printf("  LDRB%s R%d [R%d, #%d]\n",
+	       get_condition_field(registers), t, n, imm32);
 
-	printf("  LDRB R%d [R%d, #0x%08X]\n", rt, rn, imm32);
-	uint32_t value = memory_byte_read(address);
-	registers->r[rt] = value;
-	printf("  > R%d = %08X\n", rt, value);
+	LDRB_immediate(registers, t, n, imm32, index, add, wback);
+}
+
+static void a6_7_45_t2(struct registers *registers,
+                       uint16_t first_halfword,
+                       uint16_t second_halfword)
+{
+	uint8_t  n     =  (first_halfword & 0x000F) >>  0;
+	uint8_t  t     = (second_halfword & 0xF000) >> 12;
+	uint16_t imm12 = (second_halfword & 0x0FFF) >>  0;
+
+	uint32_t imm32 = imm12;
+	bool index = true;
+	bool add = true;
+	bool wback = false;
+
+	assert(!(t == 13));
+
+	printf("  LDRB%s.W R%d, [R%d, #%d]\n",
+	       get_condition_field(registers), t, n, imm32);
+
+	LDRB_immediate(registers, t, n, imm32, index, add, wback);
 }
 
 static void LDRB_register(struct registers *registers,
@@ -3654,11 +3709,41 @@ static void a5_3_7(struct registers *registers,
 	}
 }
 
+static void a5_3_9(struct registers *registers,
+                   uint16_t first_halfword,
+                   uint16_t second_halfword)
+{
+	uint8_t op1 =  (first_halfword & 0x0180) >>  7;
+	uint8_t n   =  (first_halfword & 0x000F) >>  7;
+	uint8_t t   = (second_halfword & 0xF000) >> 12;
+	uint8_t op2 = (second_halfword & 0x0FC0) >>  6;
+
+	bool nNot1111 = n != 0b1111;
+	bool tNot1111 = t != 0b1111;
+
+	if ((op1 == 0b01) && nNot1111 && tNot1111) {
+		// LDRB (immediate)
+		a6_7_45_t2(registers, first_halfword, second_halfword);
+	}
+	else if ((op1 == 0b00) && ((op2 & 0b100100) == 0b100100)
+	         && nNot1111) {
+		assert(false);
+	}
+	else if ((op1 == 0b00) && ((op2 & 0b111100) == 0b110000)
+	         && nNot1111 && tNot1111) {
+		assert(false);
+	}
+	else {
+		printf("a5_3_9\n");
+		assert(false);
+	}
+}
+
 static void a5_3_10(struct registers *registers,
                     uint16_t first_halfword,
                     uint16_t second_halfword)
 {
-	uint8_t op1 = (first_halfword & 0x00E0) >> 5;
+	uint8_t op1 =  (first_halfword & 0x00E0) >> 5;
 	uint8_t op2 = (second_halfword & 0x0FC0) >> 6;
 
 	if (op1 == 0b100) {
@@ -3908,23 +3993,27 @@ static void a5_3(struct registers *registers,
 	else if (op1 == 0b10) {
 		if (((op2 & 0b0100000) == 0b0000000)
 		     && (op == 0)) {
+			// Data processing (modified immediate)
 			a5_3_1(registers, first_halfword, second_halfword);
 		}
 		else if (((op2 & 0b0100000) == 0b0100000)
 		     && (op == 0)) {
+			// Data processing (plain binary immediate)
 			a5_3_3(registers, first_halfword, second_halfword);
 		}
 		else if ((op == 1)) {
+			// Branches and miscellaneous control
 			a5_3_4(registers, first_halfword, second_halfword);
 		}
 	}
 	else if (op1 == 0b11) {
 		if ((op2 & 0b1110001) == 0b0000000) {
+			// Store single data item
 			a5_3_10(registers, first_halfword, second_halfword);
 		}
 		else if ((op2 & 0b1100111) == 0b0000001) {
-			printf("Load bytes, memory hints\n");
-			assert(false);
+			// Load bytes, memory hints
+			a5_3_9(registers, first_halfword, second_halfword);
 		}
 		else if ((op2 & 0b1100111) == 0b0000011) {
 			printf("Load halfword, unallocated memory hints\n");
