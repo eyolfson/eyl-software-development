@@ -303,6 +303,36 @@ const char *get_address_name(uint32_t address)
 	case 0x40048050:
 		name = "SIM_FCFG2";
 		break;
+	case 0x4004B000:
+		name = "PORTC_PCR0";
+		break;
+	case 0x4004B004:
+		name = "PORTC_PCR1";
+		break;
+	case 0x4004B008:
+		name = "PORTC_PCR2";
+		break;
+	case 0x4004B00C:
+		name = "PORTC_PCR3";
+		break;
+	case 0x4004B010:
+		name = "PORTC_PCR4";
+		break;
+	case 0x4004B014:
+		name = "PORTC_PCR5";
+		break;
+	case 0x4004B018:
+		name = "PORTC_PCR6";
+		break;
+	case 0x4004B01C:
+		name = "PORTC_PCR7";
+		break;
+	case 0x4004B020:
+		name = "PORTC_PCR8";
+		break;
+	case 0x4004B024:
+		name = "PORTC_PCR9";
+		break;
 	case 0x40052000:
 		name = "WDOG_STCTRLH";
 		break;
