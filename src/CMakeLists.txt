@@ -25,3 +25,7 @@ add_executable(i8hex-reader
 	teensy_3_2.c
 	get_address_name.c
 )
+
+add_executable(describe
+	describe.c
+)
