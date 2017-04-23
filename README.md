@@ -4,7 +4,7 @@ Currently focused on the Teensy 3.2 board.
 
 ## TODO
 
-- [ ] Blink LED
+- [ ] Blink LED on Teensy 3.2
 
 ## License
 
