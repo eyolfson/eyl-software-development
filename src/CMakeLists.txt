@@ -29,3 +29,7 @@ add_executable(i8hex-reader
 add_executable(describe
 	describe.c
 )
+
+add_executable(bin-to-hex
+	bin_to_hex.c
+)
