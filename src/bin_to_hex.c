@@ -67,7 +67,7 @@ void i8hex_write(int fd, uint8_t *data, size_t size)
 
 	uint16_t address = 0x0000;
 
-	char buf[45];
+	char buf[46];
 
 	while (remaining >= 16) {
 		uint8_t checksum = 0;
@@ -82,7 +82,7 @@ void i8hex_write(int fd, uint8_t *data, size_t size)
 
 		snprintf(buf, ARRAY_SIZE(buf),
 		         ":10%04X00%02X%02X%02X%02X%02X%02X%02X%02X%02X%02X"
-		         "%02X%02X%02X%02X%02X%02X%02X\n", address,
+		         "%02X%02X%02X%02X%02X%02X%02X\r\n", address,
 		         current[0], current[1], current[2], current[3],
 		         current[4], current[5], current[6], current[7],
 		         current[8], current[9], current[10], current[11],
@@ -94,6 +94,31 @@ void i8hex_write(int fd, uint8_t *data, size_t size)
 		remaining -= 16;
 		address += 16;
 	}
+
+	if (remaining > 0) {
+		uint8_t checksum = 0;
+		checksum += remaining;                 // Length
+		checksum += ((address & 0xFF00) >> 8); // Address (high)
+		checksum += (address & 0xFF);          // Address (low)
+		checksum += 0;                         // Record type
+		for (int i = 0; i < remaining; ++i) {
+			checksum += current[i];
+		}
+		checksum = ~checksum + 1;
+
+		snprintf(buf, ARRAY_SIZE(buf),
+		         ":%02X%04X00", remaining, address);
+		write(fd, buf, 9);
+		for (int i = 0; i < remaining; ++i) {
+			snprintf(buf, ARRAY_SIZE(buf), "%02X", current[i]);
+			write(fd, buf, 2);
+		}
+		snprintf(buf, ARRAY_SIZE(buf), "%02X\r\n", checksum);
+		write(fd, buf, 4);
+	}
+
+	snprintf(buf, ARRAY_SIZE(buf), ":00000001FF\r\n");
+	write(fd, buf, 13);
 }
 
 int main(int argc, const char *const *argv)
