@@ -7,6 +7,7 @@ Currently focused on the Teensy 3.2 board.
 - [ ] Describe boot process
 - [ ] Blink LED on Teensy 3.2 (and boot)
   - [ ] Blink RGB LED
+- [ ] Software Engineering tools
 
 ## License
 
