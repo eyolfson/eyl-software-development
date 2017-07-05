@@ -5,6 +5,7 @@ Currently focused on the Teensy 3.2 board.
 ## TODO
 
 - [ ] Describe boot process
+  - [ ] Frequency requirements
 - [ ] Blink LED on Teensy 3.2 (and boot)
   - [ ] Blink RGB LED
 - [ ] Software Engineering tools
