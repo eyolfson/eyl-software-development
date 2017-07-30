@@ -12,11 +12,11 @@
     	return 0;
     }
 
-Compile with `gcc -O2 hello_world.c -o hello_world`.
+Compile with `gcc -O2 hello_world.c -o hello-world-c`.
 
-Running `perf stat -r 10 ./hello_world`:
+Running `perf stat -r 10 ./hello-world-c`:
 
-    Performance counter stats for './hello_world' (10 runs):
+    Performance counter stats for './hello-world-c' (10 runs):
     
        0.709710      task-clock (msec)      #    0.557 CPUs utilized
               0      context-switches       #    0.000 K/sec
@@ -29,9 +29,9 @@ Running `perf stat -r 10 ./hello_world`:
     
     0.001274521 seconds time elapsed        ( +-  3.68% )
 
-Running `perf stat -r 10 ./dirt-test`:
+Running `perf stat -r 10 ./hello-world`:
 
-    Performance counter stats for './dirt-test' (10 runs):
+    Performance counter stats for './hello-world' (10 runs):
     
        0.124050      task-clock (msec)      #    0.181 CPUs utilized
               0      context-switches       #    0.000 K/sec
