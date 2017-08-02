@@ -17,6 +17,11 @@ Currently focused on the Teensy 3.2 board.
 
 A different way to program.
 
+### Hello World
+
+- [ ] Binary input
+- [x] Binary output
+
 ### Portable Executables
 
 There's no such thing, even if you use libc. Even if the calling convention is
