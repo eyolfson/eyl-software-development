@@ -154,7 +154,7 @@ int main(int argc, const char *const *argv)
 	}
 
 	mode_t mode = S_IRUSR | S_IWUSR | S_IRGRP | S_IROTH;
-	int fd = open("blink.hex", O_RDWR | O_CREAT, mode);
+	int fd = open(argv[2], O_RDWR | O_CREAT, mode);
 	if (fd == -1) {
 		return 1;
 	}
@@ -166,5 +166,6 @@ int main(int argc, const char *const *argv)
 	if (close(fd) == -1) {
 		return 1;
 	}
+
 	return 0;
 }
