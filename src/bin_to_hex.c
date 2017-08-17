@@ -1,5 +1,6 @@
 #include <stdio.h>
 #include <stdint.h>
+#include <stdlib.h>
 
 #include <sys/stat.h>
 #include <fcntl.h>
@@ -7,7 +8,7 @@
 
 #define ARRAY_SIZE(a) (sizeof(a) / sizeof(a[0]))
 
-uint8_t program[] = {
+uint8_t test_program[] = {
 	0x00, 0x80, 0x00, 0x20, 0xBD, 0x01, 0x00, 0x00,
 	0x81, 0x13, 0x00, 0x00, 0x81, 0x13, 0x00, 0x00,
 
@@ -101,7 +102,7 @@ void i8hex_write(int fd, uint8_t *data, size_t size)
 		checksum += ((address & 0xFF00) >> 8); // Address (high)
 		checksum += (address & 0xFF);          // Address (low)
 		checksum += 0;                         // Record type
-		for (int i = 0; i < remaining; ++i) {
+		for (size_t i = 0; i < remaining; ++i) {
 			checksum += current[i];
 		}
 		checksum = ~checksum + 1;
@@ -109,7 +110,7 @@ void i8hex_write(int fd, uint8_t *data, size_t size)
 		snprintf(buf, ARRAY_SIZE(buf),
 		         ":%02X%04X00", remaining, address);
 		write(fd, buf, 9);
-		for (int i = 0; i < remaining; ++i) {
+		for (size_t i = 0; i < remaining; ++i) {
 			snprintf(buf, ARRAY_SIZE(buf), "%02X", current[i]);
 			write(fd, buf, 2);
 		}
@@ -123,13 +124,44 @@ void i8hex_write(int fd, uint8_t *data, size_t size)
 
 int main(int argc, const char *const *argv)
 {
+	if (argc != 3) {
+		printf("%s <input binary> <output hex>\n", argv[0]);
+		return 1;
+	}
+
+	int input_fd = open(argv[1], O_RDONLY);
+	if (input_fd == -1) {
+		return 1;
+	}
+
+	struct stat stat;
+	if (fstat(input_fd, &stat) == -1) {
+		return 1;
+	}
+
+	ssize_t binary_size = stat.st_size;
+	uint8_t *binary_data = malloc(binary_size);
+	if (binary_data == NULL) {
+		return 1;
+	}
+
+	if (read(input_fd, binary_data, binary_size) != binary_size) {
+		return 1;
+	}
+
+	if (close(input_fd) == -1) {
+		return 1;
+	}
+
 	mode_t mode = S_IRUSR | S_IWUSR | S_IRGRP | S_IROTH;
 	int fd = open("blink.hex", O_RDWR | O_CREAT, mode);
 	if (fd == -1) {
 		return 1;
 	}
 
-	i8hex_write(fd, program, ARRAY_SIZE(program));
+	i8hex_write(fd, binary_data, binary_size);
+
+	free(binary_data);
 
 	if (close(fd) == -1) {
 		return 1;
