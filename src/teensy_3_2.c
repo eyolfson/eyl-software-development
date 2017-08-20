@@ -4075,10 +4075,45 @@ void teensy_3_2_emulate(uint8_t *data, uint32_t length) {
 	uint32_t initial_sp  = word_at_address(0x00000000);
 	uint32_t initial_pc  = word_at_address(0x00000004);
 	uint32_t nmi_address = word_at_address(0x00000008);
+	uint32_t hard_fault_address = word_at_address(0x0000000c);
+	uint32_t mem_manage_fault_address = word_at_address(0x00000010);
+	uint32_t bus_fault_address = word_at_address(0x00000014);
+	uint32_t usage_fault_address = word_at_address(0x00000018);
+	uint32_t supervisor_call_address = word_at_address(0x0000002C);
+	uint32_t debug_monitor_address = word_at_address(0x00000030);
+	uint32_t pendable_address = word_at_address(0x00000038);
+	uint32_t systick_address = word_at_address(0x0000003C);
 
 	printf("Initial Stack Pointer:   %08X\n", initial_sp);
 	printf("Initial Program Counter: %08X\n", initial_pc);
 	printf("NMI Address:             %08X\n", nmi_address);
+	printf("Hard Fault Address:      %08X\n", hard_fault_address);
+	printf("MemManage Fault Address: %08X\n", mem_manage_fault_address);
+	printf("Bus Fault Address:       %08X\n", bus_fault_address);
+	printf("Usage Fault Address:     %08X\n", usage_fault_address);
+	printf("UNUSED:                  %08X\n", word_at_address(0x0000001C));
+	printf("UNUSED:                  %08X\n", word_at_address(0x00000020));
+	printf("UNUSED:                  %08X\n", word_at_address(0x00000024));
+	printf("UNUSED:                  %08X\n", word_at_address(0x00000028));
+	printf("Supervisor Call Address: %08X\n", supervisor_call_address);
+	printf("Debug Monitor Address:   %08X\n", debug_monitor_address);
+	printf("UNUSED:                  %08X\n", word_at_address(0x00000034));
+	printf("SysTick Address:         %08X\n", systick_address);
+	for (int i = 0; i < 16; ++i) {
+		printf("DMA Channel %2d Complete: %08X\n",
+		       i, word_at_address(0x00000040 + (4*i)));
+	}
+	printf("DMA Error Address:       %08X\n", word_at_address(0x00000080));
+	printf("UNUSED:                  %08X\n", word_at_address(0x00000084));
+	printf("Flash Command Complete:  %08X\n", word_at_address(0x00000088));
+	printf("Flash Read Collsion:     %08X\n", word_at_address(0x0000008C));
+	printf("Low Voltage Warning:     %08X\n", word_at_address(0x00000090));
+	printf("Low Leakage Wakeup:      %08X\n", word_at_address(0x00000094));
+	printf("WDOG or EWM:             %08X\n", word_at_address(0x00000098));
+	for (int i = 39; i < 111; ++i) {
+		printf("Vector %3d:              %08X\n",
+		       i, word_at_address(0x00000000 + (4*i)));
+	}
 
 	registers.apsr = 0; // Acutally unknown value
 
