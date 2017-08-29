@@ -22,6 +22,8 @@ static uint8_t *flash;
 static uint32_t MCG_S_reads = 0;
 static uint32_t systick_millis_count_reads = 0;
 
+static uint8_t WDOG_state = 3;
+
 static uint8_t memory_read(uint32_t address)
 {
 	if (address < 0x08000000) {
@@ -150,6 +152,16 @@ static void memory_halfword_write(uint32_t address, uint16_t data)
 	printf("  > (%s) MemU[%08X,2] = %04X\n", name, address, data);
 	memory_write(address    , data      );
 	memory_write(address + 1, data >>  8);
+
+	if (address == 0x4005200E && WDOG_state == 0 && data == 0xC520) {
+		WDOG_state = 1;
+	}
+	else if (address == 0x4005200E && WDOG_state == 1 && data == 0xD928) {
+		WDOG_state = 2;
+	}
+	else if (address == 0x40052000 && WDOG_state == 2 && data == 0x0010) {
+		WDOG_state = 3;
+	}
 }
 
 static void memory_word_write(uint32_t address, uint32_t data)
@@ -4134,4 +4146,15 @@ void teensy_3_2_emulate(uint8_t *data, uint32_t length) {
 	for (int i = 0; i < 4384; ++i) {
 		step(&registers);
 	}
+
+	printf("\n");
+
+	printf("[");
+	if (WDOG_state == 3) {
+		printf("\e[32mOkay\e[0m");
+	}
+	else {
+		printf("\e[31mMiss\e[0m");
+	}
+	printf("] watchdog disable\n");
 }
