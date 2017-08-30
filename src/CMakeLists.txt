@@ -33,3 +33,7 @@ add_executable(describe
 add_executable(bin-to-hex
 	bin_to_hex.c
 )
+
+add_executable(arithmetic-test
+	arithmetic.c
+)
