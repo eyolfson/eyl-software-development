@@ -543,6 +543,9 @@ const char *get_address_name(uint32_t address)
 	case 0x400BB030:
 		name = "ADC1_MG";
 		break;
+	case 0xE0001000:
+		name = "DWT_CTRL";
+		break;
 	case 0xE000E010:
 		name = "SYST_CSR";
 		break;
@@ -941,6 +944,18 @@ const char *get_address_name(uint32_t address)
 		break;
 	case 0xE000E5EC:
 		name = "NVIC_IPR123";
+		break;
+	case 0xE000EDF0:
+		name = "SCS_DHCSR";
+		break;
+	case 0xE000EDF4:
+		name = "SCS_DCRSR";
+		break;
+	case 0xE000EDF8:
+		name = "SCS_DCRDR";
+		break;
+	case 0xE000EDFC:
+		name = "SCS_DEMCR";
 		break;
 	case 0xE004E004:
 		name = "ICTR";
