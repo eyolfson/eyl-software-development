@@ -125,9 +125,30 @@ void test2()
 	printf(" = %d\n", expr_eval(&e1));
 }
 
+void test3()
+{
+	struct expr e1;
+	struct expr e2;
+	struct expr e3;
+	struct expr e4;
+	struct expr e5;
+	struct expr e6;
+	struct expr e7;
+	expr_set_num(&e7, 2);
+	expr_set_num(&e6, 5);
+	expr_set_op(&e5, OP_Add, &e6, &e7);
+	expr_set_num(&e4, 1);
+	expr_set_op(&e3, OP_Subtract, &e5, &e4);
+	expr_set_num(&e2, 6);
+	expr_set_op(&e1, OP_Multiply, &e3, &e2);
+	expr_print(&e1);
+	printf(" = %d\n", expr_eval(&e1));
+}
+
 int main()
 {
 	test1();
 	test2();
+	test3();
 	return 0;
 }
