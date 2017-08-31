@@ -28,7 +28,7 @@ void expr_print(struct expr *e)
 {
 	switch (e->kind) {
 	case KIND_Number:
-		printf("%d", e->num);
+		printf("%ld", e->num);
 		break;
 	case KIND_Op:
 		printf("(");
