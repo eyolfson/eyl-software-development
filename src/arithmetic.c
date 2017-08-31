@@ -102,7 +102,7 @@ void test1()
 	expr_set_num(&e2, 5);
 	expr_set_op(&e1, OP_Add, &e2, &e3);
 	expr_print(&e1);
-	printf(" = %d\n", expr_eval(&e1));
+	printf(" = %ld\n", expr_eval(&e1));
 }
 
 void test2()
@@ -122,7 +122,7 @@ void test2()
 	expr_set_op(&e2, OP_Add, &e3, &e4);
 	expr_set_op(&e1, OP_Subtract, &e2, &e5);
 	expr_print(&e1);
-	printf(" = %d\n", expr_eval(&e1));
+	printf(" = %ld\n", expr_eval(&e1));
 }
 
 void test3()
@@ -142,7 +142,7 @@ void test3()
 	expr_set_num(&e2, 6);
 	expr_set_op(&e1, OP_Multiply, &e3, &e2);
 	expr_print(&e1);
-	printf(" = %d\n", expr_eval(&e1));
+	printf(" = %ld\n", expr_eval(&e1));
 }
 
 int main()
