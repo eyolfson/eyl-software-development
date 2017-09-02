@@ -247,12 +247,8 @@ int main(int argc, char **argv)
 		bytes_read = read(fd, buf, BUF_LENGTH);
 	}
 
-	if (address_valid == 0x37F4) {
-		teensy_3_2_emulate(data, address_valid);
-	}
-	else {
-		ret = 2;
-	}
+	// blink.hex has an address_valid of 0x37F4
+	teensy_3_2_emulate(data, address_valid);
 
 	if (bytes_read < 0) {
 		ret = 1;
