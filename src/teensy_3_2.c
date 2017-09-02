@@ -22,7 +22,7 @@ static uint8_t *flash;
 static uint32_t MCG_S_reads = 0;
 static uint32_t systick_millis_count_reads = 0;
 
-static uint8_t WDOG_state = 3;
+static uint8_t WDOG_state = 0;
 
 static uint8_t memory_read(uint32_t address)
 {
