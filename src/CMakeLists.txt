@@ -37,3 +37,7 @@ add_executable(bin-to-hex
 add_executable(arithmetic-test
 	arithmetic.c
 )
+
+add_executable(teensy-compile
+	teensy_compile.c
+)
