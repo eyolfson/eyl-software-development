@@ -41,3 +41,5 @@ add_executable(arithmetic-test
 add_executable(teensy-compile
 	teensy_compile.c
 )
+
+add_subdirectory(x86-64-compiler)
