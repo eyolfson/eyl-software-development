@@ -12,6 +12,7 @@ Currently focused on the Teensy 3.2 board.
   - [ ] Computer Science tools(?)
   - [ ] Programming tools
 - [ ] Better name(?)
+- [ ] Better documentation and implementation
 
 ## x86-64 Compiler
 
