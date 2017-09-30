@@ -10,10 +10,6 @@
 
 static uint32_t nvic[111];
 
-/*
-Branch
-*/
-
 enum inst_kind {
   BRANCH,
 };
@@ -34,24 +30,31 @@ struct context {
 	uint8_t *end;
 };
 
-void generate_insts(struct context *c, struct inst *insts, size_t insts_size)
+void generate_branch_inst(struct context *c, struct branch_inst *inst)
 {
 	uint32_t addr = c->next_addr;
-	assert(insts_size == 1);
-	assert(insts[0].kind == BRANCH);
-	struct branch_inst *bi = (struct branch_inst *) &(insts[0]);
-	assert(bi == (struct branch_inst *) bi->dst);
+	assert((struct inst *) inst == inst->dst);
 	*c->pos = 0xFE;
 	++c->pos;
 	*c->pos = 0xE7;
 	++c->pos;
 }
 
+void generate_insts(struct context *c, struct inst **insts, size_t insts_size)
+{
+	for (size_t i = 0; i < insts_size; ++i) {
+		switch (insts[i]->kind) {
+		case BRANCH:
+			generate_branch_inst(c, (struct branch_inst *) insts[i]);
+			break;
+		}
+	}
+}
+
 int main(int argc, const char *argv[])
 {
-	int fd = open("teensy.bin",
-	              O_CREAT | O_WRONLY,
-	              S_IRUSR | S_IWUSR | S_IRGRP | S_IROTH);
+	mode_t mode = S_IRUSR | S_IWUSR | S_IRGRP | S_IROTH;
+	int fd = open("teensy.bin", O_CREAT | O_WRONLY, mode);
 
 	if (fd == -1)
 		return 1;
@@ -74,7 +77,6 @@ int main(int argc, const char *argv[])
 		},
 		.dst = &(unused.inst),
 	};
-
 	struct branch_inst todo = {
 		.inst = {
 			.kind = BRANCH,
@@ -82,8 +84,15 @@ int main(int argc, const char *argv[])
 		.dst = &(todo.inst),
 	};
 
-	generate_insts(&context, &(unused.inst), 1);
-	generate_insts(&context, &(todo.inst), 1);
+	struct inst *unused_insts[] = {
+		&(unused.inst),
+	};
+	struct inst *reset_insts[] = {
+		&(todo.inst),
+	};
+
+	generate_insts(&context, unused_insts, ARRAY_SIZE(unused_insts));
+	generate_insts(&context, reset_insts, ARRAY_SIZE(reset_insts));
 	assert(context.pos == context.end);
 
 	if (write(fd, nvic, sizeof(nvic)) != sizeof(nvic))
