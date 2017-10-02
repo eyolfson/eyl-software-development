@@ -11,7 +11,8 @@
 static uint32_t nvic[111];
 
 enum inst_kind {
-  BRANCH,
+	BRANCH,
+	LOAD,
 };
 
 struct inst {
@@ -21,6 +22,12 @@ struct inst {
 struct branch_inst {
 	struct inst inst;
 	struct inst *dst;
+};
+
+struct load_inst {
+	struct inst inst;
+	uint8_t reg;
+	uint32_t value;
 };
 
 struct context {
@@ -40,12 +47,19 @@ void generate_branch_inst(struct context *c, struct branch_inst *inst)
 	++c->pos;
 }
 
+void generate_load_inst(struct context *c, struct load_inst *inst)
+{
+}
+
 void generate_insts(struct context *c, struct inst **insts, size_t insts_size)
 {
 	for (size_t i = 0; i < insts_size; ++i) {
 		switch (insts[i]->kind) {
 		case BRANCH:
 			generate_branch_inst(c, (struct branch_inst *) insts[i]);
+			break;
+		case LOAD:
+			generate_load_inst(c, (struct load_inst *) insts[i]);
 			break;
 		}
 	}
@@ -77,18 +91,26 @@ int main(int argc, const char *argv[])
 		},
 		.dst = &(unused.inst),
 	};
-	struct branch_inst todo = {
+	struct load_inst load_wdog_unlock_addr = {
+		.inst = {
+			.kind = LOAD,
+		},
+		.reg = 3,
+		.value = 0x4005200E,
+	};
+	struct branch_inst infinite_loop = {
 		.inst = {
 			.kind = BRANCH,
 		},
-		.dst = &(todo.inst),
+		.dst = &(infinite_loop.inst),
 	};
 
 	struct inst *unused_insts[] = {
 		&(unused.inst),
 	};
 	struct inst *reset_insts[] = {
-		&(todo.inst),
+		&(load_wdog_unlock_addr.inst),
+		&(infinite_loop.inst),
 	};
 
 	generate_insts(&context, unused_insts, ARRAY_SIZE(unused_insts));
