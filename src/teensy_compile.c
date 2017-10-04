@@ -13,6 +13,7 @@ static uint32_t nvic[111];
 enum inst_kind {
 	BRANCH,
 	LOAD,
+	STORE_2_BYTE,
 };
 
 struct inst {
@@ -31,12 +32,18 @@ struct load_inst {
 	uint32_t value;
 };
 
+struct store_2_byte_inst {
+	struct inst inst;
+	uint8_t reg_addr;
+	uint8_t reg_value;
+};
+
 struct context {
 	uint32_t start_addr;
 	uint8_t buf[256];
 	uint8_t *pos;
 	uint8_t *end;
-	struct load_inst *literal_pool[2];
+	struct load_inst *literal_pool[8];
 	uint8_t literal_pool_size;
 };
 
@@ -62,6 +69,19 @@ void generate_load_inst(struct context *c, struct load_inst *load_inst)
 	assert(ARRAY_SIZE(c->literal_pool) != c->literal_pool_size);
 	c->literal_pool[c->literal_pool_size] = load_inst;
 	++c->literal_pool_size;
+}
+
+void generate_store_2_byte_inst(struct context *c,
+                                struct store_2_byte_inst *store_2_byte_inst)
+{
+	assert(store_2_byte_inst->reg_addr < 8);
+	assert(store_2_byte_inst->reg_value < 8);
+
+	*c->pos = (store_2_byte_inst->reg_addr << 3)
+	          | (store_2_byte_inst->reg_value);
+	++c->pos;
+	*c->pos = 0x80;
+	++c->pos;
 }
 
 void align_literal_pool(struct context *c)
@@ -118,6 +138,9 @@ void generate_inst(struct context *c, struct inst *inst)
 	case LOAD:
 		generate_load_inst(c, (struct load_inst *) inst);
 		break;
+	case STORE_2_BYTE:
+		generate_store_2_byte_inst(c, (struct store_2_byte_inst *) inst);
+		break;
 	}
 }
 
@@ -164,6 +187,55 @@ int main(int argc, const char *argv[])
 		.reg = 0,
 		.value = 0x4005200E,
 	};
+	struct load_inst load_wdog_unlock_code_1 = {
+		.inst = {
+			.kind = LOAD,
+		},
+		.reg = 1,
+		.value = 0x0000C520,
+	};
+	struct load_inst load_wdog_unlock_code_2 = {
+		.inst = {
+			.kind = LOAD,
+		},
+		.reg = 2,
+		.value = 0x0000D928,
+	};
+	struct store_2_byte_inst store_wdog_unlock_code_1 = {
+		.inst = {
+			.kind = STORE_2_BYTE,
+		},
+		.reg_addr = 0,
+		.reg_value = 1,
+	};
+	struct store_2_byte_inst store_wdog_unlock_code_2 = {
+		.inst = {
+			.kind = STORE_2_BYTE,
+		},
+		.reg_addr = 0,
+		.reg_value = 2,
+	};
+	struct load_inst load_wdog_stctrlh_addr = {
+		.inst = {
+			.kind = LOAD,
+		},
+		.reg = 0,
+		.value = 0x40052000,
+	};
+	struct load_inst load_wdog_stctrlh_value = {
+		.inst = {
+			.kind = LOAD,
+		},
+		.reg = 1,
+		.value = 0x00000010,
+	};
+	struct store_2_byte_inst store_wdog_stctrlh_disable = {
+		.inst = {
+			.kind = STORE_2_BYTE,
+		},
+		.reg_addr = 0,
+		.reg_value = 1,
+	};
 	struct branch_inst infinite_loop = {
 		.inst = {
 			.kind = BRANCH,
@@ -176,6 +248,13 @@ int main(int argc, const char *argv[])
 	};
 	struct inst *reset_insts[] = {
 		&(load_wdog_unlock_addr.inst),
+		&(load_wdog_unlock_code_1.inst),
+		&(load_wdog_unlock_code_2.inst),
+		&(store_wdog_unlock_code_1.inst),
+		&(store_wdog_unlock_code_2.inst),
+		&(load_wdog_stctrlh_addr.inst),
+		&(load_wdog_stctrlh_value.inst),
+		&(store_wdog_stctrlh_disable.inst),
 		&(infinite_loop.inst),
 	};
 
