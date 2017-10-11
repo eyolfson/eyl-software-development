@@ -14,6 +14,7 @@ enum inst_kind {
 	BRANCH,
 	LOAD,
 	STORE_2_BYTE,
+	STORE_4_BYTE,
 };
 
 struct inst {
@@ -33,6 +34,12 @@ struct load_inst {
 };
 
 struct store_2_byte_inst {
+	struct inst inst;
+	uint8_t reg_addr;
+	uint8_t reg_value;
+};
+
+struct store_4_byte_inst {
 	struct inst inst;
 	uint8_t reg_addr;
 	uint8_t reg_value;
@@ -81,6 +88,19 @@ void generate_store_2_byte_inst(struct context *c,
 	          | (store_2_byte_inst->reg_value);
 	++c->pos;
 	*c->pos = 0x80;
+	++c->pos;
+}
+
+void generate_store_4_byte_inst(struct context *c,
+                                struct store_4_byte_inst *store_4_byte_inst)
+{
+	assert(store_4_byte_inst->reg_addr < 8);
+	assert(store_4_byte_inst->reg_value < 8);
+
+	*c->pos = (store_4_byte_inst->reg_addr << 3)
+	          | (store_4_byte_inst->reg_value);
+	++c->pos;
+	*c->pos = 0x60;
 	++c->pos;
 }
 
@@ -140,6 +160,9 @@ void generate_inst(struct context *c, struct inst *inst)
 		break;
 	case STORE_2_BYTE:
 		generate_store_2_byte_inst(c, (struct store_2_byte_inst *) inst);
+		break;
+	case STORE_4_BYTE:
+		generate_store_4_byte_inst(c, (struct store_4_byte_inst *) inst);
 		break;
 	}
 }
@@ -236,6 +259,27 @@ int main(int argc, const char *argv[])
 		.reg_addr = 0,
 		.reg_value = 1,
 	};
+	struct load_inst load_sim_scgc3_addr = {
+		.inst = {
+			.kind = LOAD,
+		},
+		.reg = 0,
+		.value = 0x40048030,
+	};
+	struct load_inst load_sim_scgc3_val = {
+		.inst = {
+			.kind = LOAD,
+		},
+		.reg = 1,
+		.value = 0x09000000,
+	};
+	struct store_4_byte_inst store_sim_scgc3 = {
+		.inst = {
+			.kind = STORE_4_BYTE,
+		},
+		.reg_addr = 0,
+		.reg_value = 1,
+	};
 	struct branch_inst infinite_loop = {
 		.inst = {
 			.kind = BRANCH,
@@ -255,6 +299,9 @@ int main(int argc, const char *argv[])
 		&(load_wdog_stctrlh_addr.inst),
 		&(load_wdog_stctrlh_value.inst),
 		&(store_wdog_stctrlh_disable.inst),
+		&(load_sim_scgc3_addr.inst),
+		&(load_sim_scgc3_val.inst),
+		&(store_sim_scgc3.inst),
 		&(infinite_loop.inst),
 	};
 
