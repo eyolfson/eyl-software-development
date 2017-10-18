@@ -43,3 +43,7 @@ add_executable(teensy-compile
 )
 
 add_subdirectory(x86-64-compiler)
+
+add_executable(diff-execution
+	diff_execution.c
+)
