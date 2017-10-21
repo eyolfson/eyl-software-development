@@ -22,6 +22,7 @@ add_compile_options(-Wextra)
 
 add_executable(i8hex-reader
 	main.c
+	i8hex_parser.c
 	teensy_3_2.c
 	get_address_name.c
 )
