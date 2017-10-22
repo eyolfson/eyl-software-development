@@ -13,6 +13,7 @@ Currently focused on the Teensy 3.2 board.
   - [ ] Programming tools
 - [ ] Better name(?)
 - [ ] Better documentation and implementation
+  - [ ] Define elementary operations per CPU(?)
 
 ## x86-64 Compiler
 
