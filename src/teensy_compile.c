@@ -1,6 +1,7 @@
 #include <assert.h>
 #include <fcntl.h>
 #include <stdint.h>
+#include <string.h>
 #include <sys/stat.h>
 #include <unistd.h>
 
@@ -45,13 +46,20 @@ struct store_4_byte_inst {
 	uint8_t reg_value;
 };
 
+struct insts {
+	uint8_t data[4096];
+	size_t size;
+	size_t capacity;
+};
+
 struct context {
 	uint32_t start_addr;
 	uint8_t buf[256];
 	uint8_t *pos;
 	uint8_t *end;
-	struct load_inst *literal_pool[8];
+	struct load_inst *literal_pool[16];
 	uint8_t literal_pool_size;
+	uint8_t *insts_pos;
 };
 
 void generate_branch_inst(struct context *c, struct branch_inst *branch_inst)
@@ -149,24 +157,35 @@ void generate_literal_pool(struct context *c)
 	c->literal_pool_size = 0;
 }
 
-void generate_inst(struct context *c, struct inst *inst)
+void generate_inst(struct context *c, struct insts *insts)
 {
+	struct inst *inst = (struct inst *) c->insts_pos;
+	size_t inst_size = 0;
+
 	switch (inst->kind) {
 	case BRANCH:
 		generate_branch_inst(c, (struct branch_inst *) inst);
+		inst_size = sizeof(struct branch_inst);
 		break;
 	case LOAD:
 		generate_load_inst(c, (struct load_inst *) inst);
+		inst_size = sizeof(struct load_inst);
 		break;
 	case STORE_2_BYTE:
 		generate_store_2_byte_inst(c, (struct store_2_byte_inst *) inst);
+		inst_size = sizeof(struct store_2_byte_inst);
 		break;
 	case STORE_4_BYTE:
 		generate_store_4_byte_inst(c, (struct store_4_byte_inst *) inst);
+		inst_size = sizeof(struct store_4_byte_inst);
 		break;
 	}
+
+	assert(inst_size != 0);
+	c->insts_pos += inst_size;
 }
 
+/*
 void generate_insts(struct context *c, struct inst **insts, size_t insts_size)
 {
 	for (size_t i = 0; i < insts_size; ++i) {
@@ -174,6 +193,93 @@ void generate_insts(struct context *c, struct inst **insts, size_t insts_size)
 	}
 
 	generate_literal_pool(c);
+}
+*/
+
+void generate_insts(struct context *c, struct insts *insts)
+{
+	assert(insts->size != 0);
+	c->insts_pos = insts->data;
+
+	while(c->insts_pos < (insts->data + insts->size)) {
+		generate_inst(c, insts);
+	}
+/*
+	for (size_t i = 0; i < insts_size; ++i) {
+		generate_inst(c, insts[i]);
+	}
+*/
+
+	generate_literal_pool(c);
+}
+
+void add_bytes(struct insts *insts, uint8_t *data, size_t size)
+{
+	size_t remaining = insts->capacity - insts->size;
+	assert(remaining >= size);
+	memcpy(insts->data + insts->size, data, size);
+	insts->size += size;
+}
+
+void add_load_reg_val(struct insts *insts, uint8_t reg, uint32_t val)
+{
+	struct load_inst load = {
+		.inst = {
+			.kind = LOAD,
+		},
+		.reg = reg,
+		.value = val,
+	};
+	add_bytes(insts, (uint8_t *) &load, sizeof(load));
+}
+
+void add_store_2_bytes_reg_reg(struct insts *insts, uint8_t addr, uint8_t val)
+{
+	struct store_2_byte_inst store = {
+		.inst = {
+			.kind = STORE_2_BYTE,
+		},
+		.reg_addr = addr,
+		.reg_value = val,
+	};
+	add_bytes(insts, (uint8_t *) &store, sizeof(store));
+}
+
+void add_store_4_bytes_reg_reg(struct insts *insts, uint8_t addr, uint8_t val)
+{
+	struct store_4_byte_inst store = {
+		.inst = {
+			.kind = STORE_4_BYTE,
+		},
+		.reg_addr = addr,
+		.reg_value = val,
+	};
+	add_bytes(insts, (uint8_t *) &store, sizeof(store));
+}
+
+void add_infinite_loop(struct insts *insts)
+{
+	struct branch_inst loop = {
+		.inst = {
+			.kind = BRANCH,
+		},
+		.dst = (struct inst *) (insts->data + insts->size),
+	};
+	add_bytes(insts, (uint8_t *) &loop, sizeof(loop));
+}
+
+void add_store_2_bytes_addr_val(struct insts *insts, uint32_t addr, uint16_t val)
+{
+	add_load_reg_val(insts, 0, addr);
+	add_load_reg_val(insts, 1, val);
+	add_store_2_bytes_reg_reg(insts, 0, 1);
+}
+
+void add_store_4_bytes_addr_val(struct insts *insts, uint32_t addr, uint32_t val)
+{
+	add_load_reg_val(insts, 0, addr);
+	add_load_reg_val(insts, 1, val);
+	add_store_4_bytes_reg_reg(insts, 0, 1);
 }
 
 int main(int argc, const char *argv[])
@@ -190,6 +296,12 @@ int main(int argc, const char *argv[])
 		nvic[i] = 0x000001BD;
 	}
 
+	struct insts insts = {
+		.size = 0,
+		.capacity = sizeof(insts.data),
+	};
+	add_infinite_loop(&insts);
+
 	struct context context = {
 		.start_addr = 0x000001BC,
 		.pos = context.buf,
@@ -197,121 +309,28 @@ int main(int argc, const char *argv[])
 		.literal_pool_size = 0,
 	};
 
-	struct branch_inst unused = {
-		.inst = {
-			.kind = BRANCH,
-		},
-		.dst = &(unused.inst),
-	};
-	struct load_inst load_wdog_unlock_addr = {
-		.inst = {
-			.kind = LOAD,
-		},
-		.reg = 0,
-		.value = 0x4005200E,
-	};
-	struct load_inst load_wdog_unlock_code_1 = {
-		.inst = {
-			.kind = LOAD,
-		},
-		.reg = 1,
-		.value = 0x0000C520,
-	};
-	struct load_inst load_wdog_unlock_code_2 = {
-		.inst = {
-			.kind = LOAD,
-		},
-		.reg = 2,
-		.value = 0x0000D928,
-	};
-	struct store_2_byte_inst store_wdog_unlock_code_1 = {
-		.inst = {
-			.kind = STORE_2_BYTE,
-		},
-		.reg_addr = 0,
-		.reg_value = 1,
-	};
-	struct store_2_byte_inst store_wdog_unlock_code_2 = {
-		.inst = {
-			.kind = STORE_2_BYTE,
-		},
-		.reg_addr = 0,
-		.reg_value = 2,
-	};
-	struct load_inst load_wdog_stctrlh_addr = {
-		.inst = {
-			.kind = LOAD,
-		},
-		.reg = 0,
-		.value = 0x40052000,
-	};
-	struct load_inst load_wdog_stctrlh_value = {
-		.inst = {
-			.kind = LOAD,
-		},
-		.reg = 1,
-		.value = 0x00000010,
-	};
-	struct store_2_byte_inst store_wdog_stctrlh_disable = {
-		.inst = {
-			.kind = STORE_2_BYTE,
-		},
-		.reg_addr = 0,
-		.reg_value = 1,
-	};
-	struct load_inst load_sim_scgc3_addr = {
-		.inst = {
-			.kind = LOAD,
-		},
-		.reg = 0,
-		.value = 0x40048030,
-	};
-	struct load_inst load_sim_scgc3_val = {
-		.inst = {
-			.kind = LOAD,
-		},
-		.reg = 1,
-		.value = 0x09000000,
-	};
-	struct store_4_byte_inst store_sim_scgc3 = {
-		.inst = {
-			.kind = STORE_4_BYTE,
-		},
-		.reg_addr = 0,
-		.reg_value = 1,
-	};
-	struct branch_inst infinite_loop = {
-		.inst = {
-			.kind = BRANCH,
-		},
-		.dst = &(infinite_loop.inst),
-	};
+	generate_insts(&context, &insts);
 
-	struct inst *unused_insts[] = {
-		&(unused.inst),
-	};
-	struct inst *reset_insts[] = {
-		&(load_wdog_unlock_addr.inst),
-		&(load_wdog_unlock_code_1.inst),
-		&(load_wdog_unlock_code_2.inst),
-		&(store_wdog_unlock_code_1.inst),
-		&(store_wdog_unlock_code_2.inst),
-		&(load_wdog_stctrlh_addr.inst),
-		&(load_wdog_stctrlh_value.inst),
-		&(store_wdog_stctrlh_disable.inst),
-		&(load_sim_scgc3_addr.inst),
-		&(load_sim_scgc3_val.inst),
-		&(store_sim_scgc3.inst),
-		&(infinite_loop.inst),
-	};
+	insts.size = 0;
 
-	generate_insts(&context, unused_insts, ARRAY_SIZE(unused_insts));
-	generate_insts(&context, reset_insts, ARRAY_SIZE(reset_insts));
+	add_load_reg_val(&insts, 0, 0x4005200E);
+	add_load_reg_val(&insts, 1, 0x0000C520);
+	add_load_reg_val(&insts, 2, 0x0000D928);
+	add_store_2_bytes_reg_reg(&insts, 0, 1);
+	add_store_2_bytes_reg_reg(&insts, 0, 2);
+	add_store_2_bytes_addr_val(&insts, 0x40052000, 0x0010);
+	add_store_4_bytes_addr_val(&insts, 0x40048030, 0x09000000);
+	add_store_4_bytes_addr_val(&insts, 0x40048038, 0x00043F82);
+	add_store_4_bytes_addr_val(&insts, 0x4004803C, 0x2B000001);
+	add_infinite_loop(&insts);
+
+	generate_insts(&context, &insts);
 
 	if (write(fd, nvic, sizeof(nvic)) != sizeof(nvic))
 		return 1;
 
 	ssize_t num_bytes = context.pos - context.buf;
+	printf("Writing %ld bytes...\n", num_bytes);
 	if (write(fd, context.buf, num_bytes) != num_bytes)
 		return 1;
 
