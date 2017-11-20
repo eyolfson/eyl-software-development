@@ -330,7 +330,6 @@ int main(int argc, const char *argv[])
 		return 1;
 
 	ssize_t num_bytes = context.pos - context.buf;
-	printf("Writing %ld bytes...\n", num_bytes);
 	if (write(fd, context.buf, num_bytes) != num_bytes)
 		return 1;
 
