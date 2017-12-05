@@ -1,0 +1,55 @@
+\documentclass{article}
+
+\usepackage{fontspec}
+\setsansfont{Overpass}[Scale=MatchLowercase]
+\setmonofont{Overpass Mono}[Scale=MatchLowercase]
+
+\usepackage[letterpaper, margin=72pt]{geometry}
+
+\newcommand{\binary}[1]{$(\texttt{#1})_{2}$}
+\newcommand{\hexadecimal}[1]{$(\texttt{#1})_{16}$}
+
+\title{Teensy 3.2 Boot Process}
+
+\begin{document}
+
+\maketitle
+
+\section{Watchdog}
+
+The write to \texttt{WDOG\_STCTRLH} allows updates.
+I don't think anything uses the watchdog.
+
+\section{Real time clock}
+
+Doesn't appear to be used.
+
+\section{Multipurpose clock generator (MCG)}
+
+Sets up the clock source, likely important.
+
+\section{System integration module}
+
+System control, likely important.
+
+\section{Onboard LED}
+
+Schematic shows it on \texttt{PTC5}.
+It's connected to the Teensy as pin 13.
+
+First, configure pin 13 for output.
+Write \hexadecimal{00000144} to \texttt{PORTC\_PCR5} at \hexadecimal{4004B014}.
+Bits 8, 6, and 2 are 1.
+The \texttt{MUX} field is \binary{001}, meaning the pin is a GPIO pin.
+Bit 6 means high drive strength enable (whatever that means).
+Bit 2 means slow slew rate (again, whatever that means).
+
+Afterwards write high or low to pin 13.
+The example code writes high.
+Write \hexadecimal{00000003} to \texttt{PORTC\_PCR5} at \hexadecimal{4004B014}.
+
+\section{Resources}
+
+\texttt{MK20DX256VLH7} reference manual.
+
+\end{document}
