@@ -57,7 +57,7 @@ struct context {
 	uint8_t buf[256];
 	uint8_t *pos;
 	uint8_t *end;
-	struct load_inst *literal_pool[16];
+	struct load_inst *literal_pool[32];
 	uint8_t literal_pool_size;
 	uint8_t *insts_pos;
 };
@@ -185,17 +185,6 @@ void generate_inst(struct context *c, struct insts *insts)
 	c->insts_pos += inst_size;
 }
 
-/*
-void generate_insts(struct context *c, struct inst **insts, size_t insts_size)
-{
-	for (size_t i = 0; i < insts_size; ++i) {
-		generate_inst(c, insts[i]);
-	}
-
-	generate_literal_pool(c);
-}
-*/
-
 void generate_insts(struct context *c, struct insts *insts)
 {
 	assert(insts->size != 0);
@@ -204,11 +193,6 @@ void generate_insts(struct context *c, struct insts *insts)
 	while(c->insts_pos < (insts->data + insts->size)) {
 		generate_inst(c, insts);
 	}
-/*
-	for (size_t i = 0; i < insts_size; ++i) {
-		generate_inst(c, insts[i]);
-	}
-*/
 
 	generate_literal_pool(c);
 }
@@ -282,6 +266,14 @@ void add_store_4_bytes_addr_val(struct insts *insts, uint32_t addr, uint32_t val
 	add_store_4_bytes_reg_reg(insts, 0, 1);
 }
 
+#define WDOG_UNLOCK 0x4005200E
+#define WDOG_STCTRLH 0x40052000
+#define SIM_SCGC3 0x40048030
+#define SIM_SCGC4 0x40048034
+#define SIM_SCGC5 0x40048038
+#define SIM_SCGC6 0x4004803C
+#define PORTC_PCR5 0x4004B014
+
 int main(int argc, const char *argv[])
 {
 	mode_t mode = S_IRUSR | S_IWUSR | S_IRGRP | S_IROTH;
@@ -313,15 +305,21 @@ int main(int argc, const char *argv[])
 
 	insts.size = 0;
 
-	add_load_reg_val(&insts, 0, 0x4005200E);
+	add_load_reg_val(&insts, 0, WDOG_UNLOCK);
 	add_load_reg_val(&insts, 1, 0x0000C520);
 	add_load_reg_val(&insts, 2, 0x0000D928);
 	add_store_2_bytes_reg_reg(&insts, 0, 1);
 	add_store_2_bytes_reg_reg(&insts, 0, 2);
-	add_store_2_bytes_addr_val(&insts, 0x40052000, 0x0010);
-	add_store_4_bytes_addr_val(&insts, 0x40048030, 0x09000000);
-	add_store_4_bytes_addr_val(&insts, 0x40048038, 0x00043F82);
-	add_store_4_bytes_addr_val(&insts, 0x4004803C, 0x2B000001);
+	add_store_2_bytes_addr_val(&insts, WDOG_STCTRLH, 0x01D2);
+	add_store_4_bytes_addr_val(&insts, SIM_SCGC3, 0x09000000);
+	add_store_4_bytes_addr_val(&insts, SIM_SCGC5, 0x00043F82);
+	add_store_4_bytes_addr_val(&insts, SIM_SCGC6, 0x2B000001);
+
+	add_store_4_bytes_addr_val(&insts, SIM_SCGC4, 0x00043F82);
+
+	add_store_4_bytes_addr_val(&insts, PORTC_PCR5, 0x00000144);
+	add_store_4_bytes_addr_val(&insts, PORTC_PCR5, 0x00000003);
+
 	add_infinite_loop(&insts);
 
 	generate_insts(&context, &insts);
