@@ -14,6 +14,7 @@ static uint32_t nvic[111];
 enum inst_kind {
 	BRANCH,
 	LOAD,
+	NOOP,
 	STORE_2_BYTE,
 	STORE_4_BYTE,
 };
@@ -32,6 +33,10 @@ struct load_inst {
 	struct inst inst;
 	uint8_t reg;
 	uint32_t value;
+};
+
+struct noop_inst {
+	struct inst inst;
 };
 
 struct store_2_byte_inst {
@@ -84,6 +89,15 @@ void generate_load_inst(struct context *c, struct load_inst *load_inst)
 	assert(ARRAY_SIZE(c->literal_pool) != c->literal_pool_size);
 	c->literal_pool[c->literal_pool_size] = load_inst;
 	++c->literal_pool_size;
+}
+
+void generate_noop_inst(struct context *c, struct noop_inst *noop_inst)
+{
+	noop_inst->inst.pos = c->pos;
+	*c->pos = 0x00;
+	++c->pos;
+	*c->pos = 0xBF;
+	++c->pos;
 }
 
 void generate_store_2_byte_inst(struct context *c,
@@ -171,6 +185,10 @@ void generate_inst(struct context *c, struct insts *insts)
 		generate_load_inst(c, (struct load_inst *) inst);
 		inst_size = sizeof(struct load_inst);
 		break;
+	case NOOP:
+		generate_noop_inst(c, (struct noop_inst *) inst);
+		inst_size = sizeof(struct noop_inst);
+		break;
 	case STORE_2_BYTE:
 		generate_store_2_byte_inst(c, (struct store_2_byte_inst *) inst);
 		inst_size = sizeof(struct store_2_byte_inst);
@@ -252,6 +270,16 @@ void add_infinite_loop(struct insts *insts)
 	add_bytes(insts, (uint8_t *) &loop, sizeof(loop));
 }
 
+void add_noop(struct insts *insts)
+{
+	struct noop_inst noop = {
+		.inst = {
+			.kind = NOOP,
+		},
+	};
+	add_bytes(insts, (uint8_t *) &noop, sizeof(noop));
+}
+
 void add_store_2_bytes_addr_val(struct insts *insts, uint32_t addr, uint16_t val)
 {
 	add_load_reg_val(insts, 0, addr);
@@ -273,6 +301,8 @@ void add_store_4_bytes_addr_val(struct insts *insts, uint32_t addr, uint32_t val
 #define SIM_SCGC5 0x40048038
 #define SIM_SCGC6 0x4004803C
 #define PORTC_PCR5 0x4004B014
+#define GPIOC_PDOR 0x400FF080
+#define GPIOC_PDDR 0x400FF094
 
 int main(int argc, const char *argv[])
 {
@@ -281,6 +311,7 @@ int main(int argc, const char *argv[])
 
 	if (fd == -1)
 		return 1;
+	ftruncate(fd, 0);
 
 	nvic[0] = 0x20008000;
 	nvic[1] = 0x000001BF;
@@ -305,20 +336,25 @@ int main(int argc, const char *argv[])
 
 	insts.size = 0;
 
+/*
 	add_load_reg_val(&insts, 0, WDOG_UNLOCK);
 	add_load_reg_val(&insts, 1, 0x0000C520);
 	add_load_reg_val(&insts, 2, 0x0000D928);
 	add_store_2_bytes_reg_reg(&insts, 0, 1);
 	add_store_2_bytes_reg_reg(&insts, 0, 2);
+	add_noop(&insts);
+	add_noop(&insts);
 	add_store_2_bytes_addr_val(&insts, WDOG_STCTRLH, 0x01D2);
+*/
 	add_store_4_bytes_addr_val(&insts, SIM_SCGC3, 0x09000000);
 	add_store_4_bytes_addr_val(&insts, SIM_SCGC5, 0x00043F82);
 	add_store_4_bytes_addr_val(&insts, SIM_SCGC6, 0x2B000001);
 
 	add_store_4_bytes_addr_val(&insts, SIM_SCGC4, 0x00043F82);
 
-	add_store_4_bytes_addr_val(&insts, PORTC_PCR5, 0x00000144);
-	add_store_4_bytes_addr_val(&insts, PORTC_PCR5, 0x00000003);
+	add_store_4_bytes_addr_val(&insts, PORTC_PCR5, 0x00000143);
+	add_store_4_bytes_addr_val(&insts, GPIOC_PDDR, 0x00000002);
+	add_store_4_bytes_addr_val(&insts, GPIOC_PDOR, 0x00000002);
 
 	add_infinite_loop(&insts);
 

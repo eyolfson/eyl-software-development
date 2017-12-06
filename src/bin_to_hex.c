@@ -159,6 +159,7 @@ int main(int argc, const char *const *argv)
 		return 1;
 	}
 
+	ftruncate(fd, 0);
 	i8hex_write(fd, binary_data, binary_size);
 
 	free(binary_data);
