@@ -300,6 +300,7 @@ void add_store_4_bytes_addr_val(struct insts *insts, uint32_t addr, uint32_t val
 #define SIM_SCGC4 0x40048034
 #define SIM_SCGC5 0x40048038
 #define SIM_SCGC6 0x4004803C
+#define SIM_CLKDIV1 0x40048044
 #define PORTC_PCR5 0x4004B014
 #define GPIOC_PDOR 0x400FF080
 #define GPIOC_PDDR 0x400FF094
@@ -336,7 +337,6 @@ int main(int argc, const char *argv[])
 
 	insts.size = 0;
 
-/*
 	add_load_reg_val(&insts, 0, WDOG_UNLOCK);
 	add_load_reg_val(&insts, 1, 0x0000C520);
 	add_load_reg_val(&insts, 2, 0x0000D928);
@@ -344,13 +344,12 @@ int main(int argc, const char *argv[])
 	add_store_2_bytes_reg_reg(&insts, 0, 2);
 	add_noop(&insts);
 	add_noop(&insts);
-	add_store_2_bytes_addr_val(&insts, WDOG_STCTRLH, 0x01D2);
-*/
+	add_store_2_bytes_addr_val(&insts, WDOG_STCTRLH, 0x0010);
 	add_store_4_bytes_addr_val(&insts, SIM_SCGC3, 0x09000000);
+	add_store_4_bytes_addr_val(&insts, SIM_SCGC4, 0x00040000);
 	add_store_4_bytes_addr_val(&insts, SIM_SCGC5, 0x00043F82);
 	add_store_4_bytes_addr_val(&insts, SIM_SCGC6, 0x2B000001);
-
-	add_store_4_bytes_addr_val(&insts, SIM_SCGC4, 0x00043F82);
+	add_store_4_bytes_addr_val(&insts, SIM_CLKDIV1, 0x11030000);
 
 	add_store_4_bytes_addr_val(&insts, PORTC_PCR5, 0x00000143);
 	add_store_4_bytes_addr_val(&insts, GPIOC_PDDR, 0x00000002);
